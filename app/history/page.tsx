@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react'; // <-- ADD useCallback HERE
 import Header from '@/components/Header';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
@@ -28,8 +28,9 @@ export default function HistoryPage() {
   const [totalPBs, setTotalPBs] = useState(0);
   const [totalRewards, setTotalRewards] = useState('0M GP');
 
-  // Helper function to calculate stats (does not need to be in deps as setters are stable)
-  const calculateStats = (items: HistoryItem[]) => {
+  // 1. Wrap calculateStats with useCallback
+  // It only uses state setters, which are stable, so its dependencies are empty.
+  const calculateStats = useCallback((items: HistoryItem[]) => {
     let bountyCount = 0, pbCount = 0, rewardValue = 0;
     const approvedItems = items.filter(item => item.status === 'approved');
     approvedItems.forEach(item => {
@@ -45,10 +46,11 @@ export default function HistoryPage() {
     setTotalBountiesClaimed(bountyCount);
     setTotalPBs(pbCount);
     setTotalRewards(`${rewardValue}M GP`);
-  };
+  }, [setTotalBountiesClaimed, setTotalPBs, setTotalRewards]); // Include setters for explicitness, though they are stable
 
-  // Helper function to fetch history (needs calculateStats in deps if defined here)
-  const fetchHistory = async () => {
+  // 2. Wrap fetchHistory with useCallback
+  // It depends on setHistoryItems (stable) and calculateStats (now stable).
+  const fetchHistory = useCallback(async () => {
     const { data, error } = await supabase
       .from('submissions')
       .select('*')
@@ -59,24 +61,27 @@ export default function HistoryPage() {
       console.error("Error fetching history:", error);
     } else if (data) {
       setHistoryItems(data as HistoryItem[]);
-      calculateStats(data as HistoryItem[]);
+      calculateStats(data as HistoryItem[]); // calculateStats is now a stable reference
     }
-  };
+  }, [setHistoryItems, calculateStats]); // Add calculateStats to dependencies
 
-  // initializePage and useEffect dependency fix
-  const initializePage = async () => {
+  // 3. Wrap initializePage with useCallback
+  // It depends on setLoading (stable), setUser (stable), and fetchHistory (now stable).
+  const initializePage = useCallback(async () => {
     setLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     setUser(session?.user ?? null);
-    await fetchHistory();
+    await fetchHistory(); // fetchHistory is now a stable reference
     setLoading(false);
-  };
+  }, [setLoading, setUser, fetchHistory]); // Add fetchHistory to dependencies
 
+  // useEffect now consumes a stable initializePage function
   useEffect(() => {
     initializePage();
-  }, [initializePage]); // Added initializePage to dependency array
+  }, [initializePage]); // initializePage is now a stable dependency, warning resolved!
 
-  const handleDelete = async (id: number) => {
+  // 4. Wrap handleDelete with useCallback as it also uses fetchHistory
+  const handleDelete = useCallback(async (id: number) => {
     if (window.confirm("Are you sure you want to permanently delete this submission? This action cannot be undone.")) {
       const { error } = await supabase
         .from('submissions')
@@ -89,7 +94,8 @@ export default function HistoryPage() {
         await fetchHistory(); // Re-fetch the history to update the UI
       }
     }
-  };
+  }, [fetchHistory]); // Add fetchHistory to dependencies
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">

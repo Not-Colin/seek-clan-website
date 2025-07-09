@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useEffect, useState, FormEvent, ChangeEvent } from 'react';
+import { useEffect, useState, FormEvent, ChangeEvent, useCallback } from 'react'; // <-- ADD useCallback HERE
 import { supabase } from '@/lib/supabaseClient';
 import AdminLogin from '@/components/AdminLogin';
 import Header from '@/components/Header';
@@ -30,34 +30,115 @@ export default function AdminPage() {
   const [submissionPassword, setSubmissionPassword] = useState('');
   const [settingsStatus, setSettingsStatus] = useState('');
 
-  const fetchPendingSubmissions = async () => { const { data, error } = await supabase.from('submissions').select('*').eq('status', 'pending').order('created_at', { ascending: true }); if (error) console.error('Error fetching pending submissions:', error); else setPendingSubmissions(data || []); };
-  const fetchBounties = async () => { const { data, error } = await supabase.from('bounties').select('*').order('created_at', { ascending: false }); if (error) console.error('Error fetching bounties:', error); else setBounties(data || []); };
-  const fetchPersonalBests = async () => { const { data, error } = await supabase.from('submissions').select('*').eq('status', 'approved').eq('submission_type', 'personal_best').order('created_at', { ascending: false }); if (error) console.error('Error fetching PBs:', error); else setPersonalBests((data as Submission[]) || []); };
-  const fetchSettings = async () => { const { data, error } = await supabase.from('settings').select('*').eq('id', 1).single(); if (error) { console.error("Error fetching settings:", error); } else if (data) { setIsPasswordRequired(data.is_password_required); setSubmissionPassword(data.submission_password || ''); } };
+  // Wrap all helper fetch functions with useCallback
+  const fetchPendingSubmissions = useCallback(async () => {
+    const { data, error } = await supabase.from('submissions').select('*').eq('status', 'pending').order('created_at', { ascending: true });
+    if (error) console.error('Error fetching pending submissions:', error);
+    else setPendingSubmissions(data || []);
+  }, [setPendingSubmissions]); // setPendingSubmissions is a stable setter, so [] is fine
 
-  // checkUser function defined to be stable by not relying on external changing state/props
-  const checkUser = async () => {
+  const fetchBounties = useCallback(async () => {
+    const { data, error } = await supabase.from('bounties').select('*').order('created_at', { ascending: false });
+    if (error) console.error('Error fetching bounties:', error);
+    else setBounties(data || []);
+  }, [setBounties]); // setBounties is a stable setter, so [] is fine
+
+  const fetchPersonalBests = useCallback(async () => {
+    const { data, error } = await supabase.from('submissions').select('*').eq('status', 'approved').eq('submission_type', 'personal_best').order('created_at', { ascending: false });
+    if (error) console.error('Error fetching PBs:', error);
+    else setPersonalBests((data as Submission[]) || []);
+  }, [setPersonalBests]); // setPersonalBests is a stable setter, so [] is fine
+
+  const fetchSettings = useCallback(async () => {
+    const { data, error } = await supabase.from('settings').select('*').eq('id', 1).single();
+    if (error) { console.error("Error fetching settings:", error); }
+    else if (data) { setIsPasswordRequired(data.is_password_required); setSubmissionPassword(data.submission_password || ''); }
+  }, [setIsPasswordRequired, setSubmissionPassword]); // Setters are stable, so [] is fine
+
+  // checkUser function defined to be stable using useCallback
+  const checkUser = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
     const currentUser = session?.user ?? null;
     setUser(currentUser);
     if (currentUser) {
+      // These functions are now stable due to their own useCallback wrappers
       await Promise.all([ fetchPendingSubmissions(), fetchBounties(), fetchPersonalBests(), fetchSettings() ]);
     }
     setLoading(false);
-  };
+  }, [setUser, setLoading, fetchPendingSubmissions, fetchBounties, fetchPersonalBests, fetchSettings]); // Dependencies for checkUser
 
-  // useEffect dependency array includes checkUser
+  // useEffect dependency array now includes the stable checkUser
   useEffect(() => {
     checkUser();
-  }, [checkUser]); // Added checkUser to dependency array
+  }, [checkUser]);
 
-  const handleUpdateStatus = async (id: number, status: 'approved' | 'rejected') => { const { error } = await supabase.from('submissions').update({ status }).eq('id', id); if (error) { alert(`Error: ${error.message}`); } else { await fetchPendingSubmissions(); if (status === 'approved') { await fetchPersonalBests(); } } };
-  const handleBountyFileChange = (e: ChangeEvent<HTMLInputElement>) => { setNewBountyFile(null); if (e.target.files && e.target.files.length > 0) { const file = e.target.files[0]; const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']; if (!allowedTypes.includes(file.type)) { alert("Invalid file type. Please upload a PNG, JPG, GIF, or WEBP image."); e.target.value = ''; return; } setNewBountyFile(file); } };
-  const handleBountySubmit = async (e: FormEvent) => { e.preventDefault(); if (!newBountyFile || !newBountyName) return; setIsSubmittingBounty(true); try { const fileName = `${Date.now()}.${newBountyFile.name.split('.').pop()}`; const { error: uError } = await supabase.storage.from('bounty-images').upload(fileName, newBountyFile); if (uError) throw uError; const { data: urlData } = supabase.storage.from('bounty-images').getPublicUrl(fileName); const { error: iError } = await supabase.from('bounties').insert([{ name: newBountyName, tier: newBountyTier, image_url: urlData.publicUrl, is_active: true }]); if (iError) throw iError; setNewBountyName(''); setNewBountyTier('low'); setNewBountyFile(null); const form = e.target as HTMLFormElement; form.reset(); await fetchBounties(); } catch (error: any) { alert(`Error: ${error.message}`); } finally { setIsSubmittingBounty(false); } };
-  const handleBountyArchive = async (id: number, currentStatus: boolean) => { const { error } = await supabase.from('bounties').update({ is_active: !currentStatus }).eq('id', id); if (error) alert(`Error: ${error.message}`); else await fetchBounties(); };
-  const handlePbArchive = async (id: number, currentStatus: boolean) => { const { error } = await supabase.from('submissions').update({ is_archived: !currentStatus }).eq('id', id); if (error) alert(`Error updating PB: ${error.message}`); else await fetchPersonalBests(); };
-  const handleUpdateSettings = async (e: FormEvent) => { e.preventDefault(); setSettingsStatus('Saving...'); const { error } = await supabase.from('settings').update({ is_password_required: isPasswordRequired, submission_password: submissionPassword || null }).eq('id', 1); if (error) { setSettingsStatus(`Error: ${error.message}`); } else { setSettingsStatus('Settings saved successfully!'); setTimeout(() => setSettingsStatus(''), 2000); } };
-  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); };
+  // All other handlers that modify state and are used in JSX should also be wrapped in useCallback
+  // This is good practice to prevent unnecessary re-renders of child components
+  const handleUpdateStatus = useCallback(async (id: number, status: 'approved' | 'rejected') => {
+    const { error } = await supabase.from('submissions').update({ status }).eq('id', id);
+    if (error) { alert(`Error: ${error.message}`); }
+    else { await fetchPendingSubmissions(); if (status === 'approved') { await fetchPersonalBests(); } }
+  }, [fetchPendingSubmissions, fetchPersonalBests]); // Dependencies for handleUpdateStatus
+
+  const handleBountyFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setNewBountyFile(null);
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) { alert("Invalid file type. Please upload a PNG, JPG, GIF, or WEBP image."); e.target.value = ''; return; }
+      setNewBountyFile(file);
+    }
+  }, [setNewBountyFile]); // Dependencies for handleBountyFileChange
+
+  const handleBountySubmit = useCallback(async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newBountyFile || !newBountyName) return;
+    setIsSubmittingBounty(true);
+    try {
+      const fileName = `${Date.now()}.${newBountyFile.name.split('.').pop()}`;
+      const { error: uError } = await supabase.storage.from('bounty-images').upload(fileName, newBountyFile);
+      if (uError) throw uError;
+      const { data: urlData } = supabase.storage.from('bounty-images').getPublicUrl(fileName);
+      const { error: iError } = await supabase.from('bounties').insert([{ name: newBountyName, tier: newBountyTier, image_url: urlData.publicUrl, is_active: true }]);
+      if (iError) throw iError;
+      setNewBountyName('');
+      setNewBountyTier('low');
+      setNewBountyFile(null);
+      const form = e.target as HTMLFormElement;
+      form.reset();
+      await fetchBounties();
+    } catch (error: any) {
+      alert(`Error: ${error.message}`);
+    } finally {
+      setIsSubmittingBounty(false);
+    }
+  }, [newBountyFile, newBountyName, newBountyTier, fetchBounties, setNewBountyName, setNewBountyTier, setNewBountyFile, setIsSubmittingBounty]); // Dependencies for handleBountySubmit
+
+  const handleBountyArchive = useCallback(async (id: number, currentStatus: boolean) => {
+    const { error } = await supabase.from('bounties').update({ is_active: !currentStatus }).eq('id', id);
+    if (error) alert(`Error: ${error.message}`);
+    else await fetchBounties();
+  }, [fetchBounties]); // Dependencies for handleBountyArchive
+
+  const handlePbArchive = useCallback(async (id: number, currentStatus: boolean) => {
+    const { error } = await supabase.from('submissions').update({ is_archived: !currentStatus }).eq('id', id);
+    if (error) alert(`Error updating PB: ${error.message}`);
+    else await fetchPersonalBests();
+  }, [fetchPersonalBests]); // Dependencies for handlePbArchive
+
+  const handleUpdateSettings = useCallback(async (e: FormEvent) => {
+    e.preventDefault();
+    setSettingsStatus('Saving...');
+    const { error } = await supabase.from('settings').update({ is_password_required: isPasswordRequired, submission_password: submissionPassword || null }).eq('id', 1);
+    if (error) { setSettingsStatus(`Error: ${error.message}`); }
+    else { setSettingsStatus('Settings saved successfully!'); setTimeout(() => setSettingsStatus(''), 2000); }
+  }, [isPasswordRequired, submissionPassword, setSettingsStatus]); // Dependencies for handleUpdateSettings
+
+  const handleLogout = useCallback(async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  }, [setUser]); // Dependencies for handleLogout
+
 
   if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Loading...</div>;
   if (!user) return <AdminLogin onLogin={checkUser} />;
