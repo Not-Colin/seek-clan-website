@@ -4,15 +4,15 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient'; // Import Supabase client
-import type { User } from '@supabase/supabase-js'; // Import User type
+import { usePathname, useRouter } from 'next/navigation'; // <-- Import useRouter
+import { supabase } from '@/lib/supabaseClient';
+import type { User } from '@supabase/supabase-js';
 
 export default function Header() {
   const pathname = usePathname();
-  const [user, setUser] = useState<User | null>(null); // State to track login status
+  const router = useRouter(); // <-- Initialize useRouter hook
+  const [user, setUser] = useState<User | null>(null);
 
-  // This effect runs once to check if a user session exists
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -21,19 +21,26 @@ export default function Header() {
     checkUser();
 
     // Listen for changes in auth state (e.g., login, logout) and update the UI
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } = {} } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      // Optional: If signed out from another tab, redirect if on admin page
+      if (_event === 'SIGNED_OUT' && pathname.startsWith('/admin')) {
+        router.push('/'); // Redirect to home if on admin page and signed out
+      }
     });
 
     // Cleanup the listener when the component unmounts
     return () => {
-      subscription.unsubscribe();
+      if (subscription) { // Ensure subscription exists before unsubscribing
+        subscription.unsubscribe();
+      }
     };
-  }, []);
+  }, [pathname, router]); // Add pathname and router to dependencies
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    // The onAuthStateChange listener will automatically update the user state to null
+    setUser(null); // Explicitly set user state to null for immediate UI update
+    router.push('/'); // Redirect to the dashboard/homepage after logging out
   };
 
   const tabs = [
@@ -89,7 +96,7 @@ export default function Header() {
             {user ? (
               // If user is logged in, show a Logout button
               <button
-                onClick={handleLogout}
+                onClick={handleLogout} // This now calls our new handleLogout
                 className="flex items-center space-x-2 text-gray-400 hover:text-red-400 transition-colors"
                 title="Logout"
               >
