@@ -2,41 +2,52 @@
 
 'use client';
 
-import { useState } from 'react';
-import { supabase } from '../lib/supabaseClient'; // Import our new client
+import { useState, FormEvent } from 'react';
+import { supabase } from '@/lib/supabaseClient'; // Corrected import path for supabase
+import Link from 'next/link'; // IMPORTANT: Make sure Link is imported
 
 interface AdminLoginProps {
   onLogin: () => void;
 }
 
 export default function AdminLogin({ onLogin }: AdminLoginProps) {
-  const [email, setEmail] = useState(''); // Change from username
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     // Securely sign in using Supabase Auth
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error: authError } = await supabase.auth.signInWithPassword({
       email: email,
       password: password,
     });
 
-    if (error) {
-      setError(error.message); // Show the real error from Supabase
+    if (authError) {
+      setError(authError.message);
     } else {
-      onLogin(); // Tell the parent page we've logged in successfully
+      onLogin();
     }
     setLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center px-6">
-      <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-8 w-full max-w-md">
+      <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-8 w-full max-w-md relative">
+        {/* --- NEW: "Back to Dashboard" Button/Link --- */}
+        {/* This link is now part of the flow, centered, and visually distinct */}
+        <Link
+          href="/"
+          className="block text-center mx-auto mb-8 py-2 px-4 border border-slate-700 rounded-lg text-gray-300 hover:bg-slate-700/50 transition-colors text-sm font-medium"
+        >
+          Back to Dashboard
+        </Link>
+
+        {/* Adjusted margin-top removed as the link above provides spacing */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Admin Access</h1>
           <p className="text-gray-400">Login to access the admin panel</p>
