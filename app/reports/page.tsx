@@ -1,32 +1,9 @@
-// app/reports/page.tsx - SHOULD BE VISUALLY FINE
-
 'use client';
 
 import Header from '../../components/Header';
 import { useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
-// (NOTE: The data in this file seems to be placeholder/demo data, not dynamic from Supabase)
-const performanceData = [
-  { time: '00:00', cpu: 45, memory: 62, network: 23 },
-  { time: '04:00', cpu: 52, memory: 58, network: 31 },
-  { time: '08:00', cpu: 78, memory: 71, network: 45 },
-  { time: '12:00', cpu: 85, memory: 79, network: 52 },
-  { time: '16:00', cpu: 72, memory: 68, network: 38 },
-  { time: '20:00', cpu: 61, memory: 64, network: 29 },
-  { time: '24:00', cpu: 48, memory: 59, network: 25 },
-];
-
-const userEngagementData = [
-  { month: 'Jan', sessions: 4200, bounceRate: 0.32, avgDuration: 185 },
-  { month: 'Feb', sessions: 3800, bounceRate: 0.28, avgDuration: 195 },
-  { month: 'Mar', sessions: 5100, bounceRate: 0.25, avgDuration: 205 },
-  { month: 'Apr', sessions: 4600, bounceRate: 0.30, avgDuration: 178 },
-  { month: 'May', sessions: 5400, bounceRate: 0.22, avgDuration: 215 },
-  { month: 'Jun', sessions: 6200, bounceRate: 0.19, avgDuration: 225 },
-];
-
-export default function Analytics() { // Note: This component is named Analytics but located in reports/page.tsx
+export default function Reports() {
   const [selectedPeriod, setSelectedPeriod] = useState('monthly');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
@@ -108,7 +85,7 @@ export default function Analytics() { // Note: This component is named Analytics
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       <Header />
-
+      
       <main className="px-6 py-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
@@ -159,7 +136,7 @@ export default function Analytics() { // Note: This component is named Analytics
                 Generate New Report
               </h3>
               <div className="flex space-x-4">
-                <select
+                <select 
                   value={selectedPeriod}
                   onChange={(e) => setSelectedPeriod(e.target.value)}
                   className="px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm pr-8"
@@ -169,7 +146,7 @@ export default function Analytics() { // Note: This component is named Analytics
                   <option value="monthly">Monthly</option>
                   <option value="quarterly">Quarterly</option>
                 </select>
-                <select
+                <select 
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
                   className="px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm pr-8"
@@ -194,7 +171,7 @@ export default function Analytics() { // Note: This component is named Analytics
               </div>
               Recent Reports
             </h3>
-
+            
             <div className="space-y-4">
               {reports.map((report, index) => (
                 <div key={index} className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg hover:bg-slate-700/50 transition-colors">
@@ -212,13 +189,13 @@ export default function Analytics() { // Note: This component is named Analytics
                       </div>
                     </div>
                   </div>
-
+                  
                   <div className="flex items-center space-x-4">
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(report.status)} flex items-center`}>
                       <i className={`${getStatusIcon(report.status)} mr-1`}></i>
                       {report.status.charAt(0).toUpperCase() + report.status.slice(1)}
                     </span>
-
+                    
                     {report.status === 'completed' && (
                       <button className="p-2 text-gray-400 hover:text-blue-400 transition-colors cursor-pointer">
                         <div className="w-5 h-5 flex items-center justify-center">
@@ -226,9 +203,11 @@ export default function Analytics() { // Note: This component is named Analytics
                         </div>
                       </button>
                     )}
-
+                    
                     <button className="p-2 text-gray-400 hover:text-blue-400 transition-colors cursor-pointer">
+                      <div className="w-5 h-5 flex items-center justify-center">
                         <i className="ri-more-2-line"></i>
+                      </div>
                     </button>
                   </div>
                 </div>

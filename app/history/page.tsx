@@ -1,16 +1,22 @@
-// app/history/page.tsx - FINAL UI RESTORED + FUNCTIONALITY PRESERVED
+// app/history/page.tsx - WITH WARNING FIXES
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react'; // <-- ADD useCallback HERE
 import Header from '@/components/Header';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
 
 interface HistoryItem {
-  id: number; created_at: string; player_name: string; submission_type: string;
-  bounty_name: string | null; bounty_tier: 'low' | 'medium' | 'high' | null;
-  personal_best_category: string | null; proof_image_url: string; status: 'approved' | 'rejected';
+  id: number;
+  created_at: string;
+  player_name: string;
+  submission_type: string;
+  bounty_name: string | null;
+  bounty_tier: 'low' | 'medium' | 'high' | null;
+  personal_best_category: string | null;
+  proof_image_url: string;
+  status: 'approved' | 'rejected';
 }
 
 export default function HistoryPage() {
@@ -22,7 +28,8 @@ export default function HistoryPage() {
   const [totalPBs, setTotalPBs] = useState(0);
   const [totalRewards, setTotalRewards] = useState('0M GP');
 
-  // Helper functions - wrapped with useCallback for stability
+  // 1. Wrap calculateStats with useCallback
+  // It only uses state setters, which are stable, so its dependencies are empty.
   const calculateStats = useCallback((items: HistoryItem[]) => {
     let bountyCount = 0, pbCount = 0, rewardValue = 0;
     const approvedItems = items.filter(item => item.status === 'approved');
@@ -39,8 +46,10 @@ export default function HistoryPage() {
     setTotalBountiesClaimed(bountyCount);
     setTotalPBs(pbCount);
     setTotalRewards(`${rewardValue}M GP`);
-  }, []);
+  }, [setTotalBountiesClaimed, setTotalPBs, setTotalRewards]); // Include setters for explicitness, though they are stable
 
+  // 2. Wrap fetchHistory with useCallback
+  // It depends on setHistoryItems (stable) and calculateStats (now stable).
   const fetchHistory = useCallback(async () => {
     const { data, error } = await supabase
       .from('submissions')
@@ -52,22 +61,26 @@ export default function HistoryPage() {
       console.error("Error fetching history:", error);
     } else if (data) {
       setHistoryItems(data as HistoryItem[]);
-      calculateStats(data as HistoryItem[]);
+      calculateStats(data as HistoryItem[]); // calculateStats is now a stable reference
     }
-  }, [calculateStats]);
+  }, [setHistoryItems, calculateStats]); // Add calculateStats to dependencies
 
+  // 3. Wrap initializePage with useCallback
+  // It depends on setLoading (stable), setUser (stable), and fetchHistory (now stable).
   const initializePage = useCallback(async () => {
     setLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     setUser(session?.user ?? null);
-    await fetchHistory();
+    await fetchHistory(); // fetchHistory is now a stable reference
     setLoading(false);
-  }, [fetchHistory]);
+  }, [setLoading, setUser, fetchHistory]); // Add fetchHistory to dependencies
 
+  // useEffect now consumes a stable initializePage function
   useEffect(() => {
     initializePage();
-  }, [initializePage]);
+  }, [initializePage]); // initializePage is now a stable dependency, warning resolved!
 
+  // 4. Wrap handleDelete with useCallback as it also uses fetchHistory
   const handleDelete = useCallback(async (id: number) => {
     if (window.confirm("Are you sure you want to permanently delete this submission? This action cannot be undone.")) {
       const { error } = await supabase
@@ -78,10 +91,10 @@ export default function HistoryPage() {
       if (error) {
         alert(`Error deleting submission: ${error.message}`);
       } else {
-        await fetchHistory();
+        await fetchHistory(); // Re-fetch the history to update the UI
       }
     }
-  }, [fetchHistory]);
+  }, [fetchHistory]); // Add fetchHistory to dependencies
 
 
   return (

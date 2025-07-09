@@ -1,11 +1,11 @@
-// app/submit/page.tsx - FINAL UI RESTORED + FUNCTIONALITY PRESERVED
+// app/submit/page.tsx
 
-'use client';
+'use client'; // This directive MUST remain at the very top of the file
 
-import { useState, useEffect, ChangeEvent, FormEvent, Suspense, useCallback } from 'react'; // Added useCallback
+import { useState, useEffect, ChangeEvent, FormEvent, Suspense } from 'react';
 import Header from '@/components/Header';
 import { supabase } from '@/lib/supabaseClient';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation'; // This hook is the reason for Suspense
 
 interface Bounty {
   id: number;
@@ -20,7 +20,7 @@ const pbCategories = [
 
 // This new component will contain all the logic and UI that depends on useSearchParams
 function SubmitFormContent() {
-  const searchParams = useSearchParams();
+  const searchParams = useSearchParams(); // useSearchParams is now safely inside a client component wrapped by Suspense
 
   // Form State
   const [submissionType, setSubmissionType] = useState('bounty');
@@ -39,48 +39,51 @@ function SubmitFormContent() {
   const [isPasswordRequired, setIsPasswordRequired] = useState(false);
   const [userEnteredPassword, setUserEnteredPassword] = useState('');
 
-  // initializePage function wrapped with useCallback
-  const initializePage = useCallback(async () => {
-    // Fetch Bounties for the dropdown
-    const { data: bountyData, error: bountyError } = await supabase.from('bounties').select('id, name, tier').eq('is_active', true);
-    if (bountyError) { console.error('Error fetching bounties:', bountyError); }
-    else if (bountyData) {
-      setBounties(bountyData as Bounty[]);
-      const bountyFromUrl = searchParams.get('bounty');
-      if (bountyFromUrl && bountyData.some(b => b.name === decodeURIComponent(bountyFromUrl))) {
-        setSelectedBounty(decodeURIComponent(bountyFromUrl));
-      } else if (bountyData.length > 0) {
-        setSelectedBounty(bountyData[0].name);
-      }
-    }
-
-    // Fetch the site setting to see if a password is required
-    const { data: settingsData, error: settingsError } = await supabase.from('settings').select('is_password_required').eq('id', 1).single();
-    if (settingsError) { console.error('Error fetching settings:', settingsError); }
-    else if (settingsData) {
-      setIsPasswordRequired(settingsData.is_password_required);
-    }
-  }, [searchParams]); // searchParams is a dependency for this useCallback
-
   useEffect(() => {
-    initializePage();
-  }, [initializePage]); // useEffect dependency includes the stable initializePage
+    // This function runs on page load to get necessary data
+    const initializePage = async () => {
+      // Fetch Bounties for the dropdown
+      const { data: bountyData, error: bountyError } = await supabase.from('bounties').select('id, name, tier').eq('is_active', true);
+      if (bountyError) { console.error('Error fetching bounties:', bountyError); }
+      else if (bountyData) {
+        setBounties(bountyData as Bounty[]);
+        const bountyFromUrl = searchParams.get('bounty');
+        if (bountyFromUrl && bountyData.some(b => b.name === decodeURIComponent(bountyFromUrl))) {
+          setSelectedBounty(decodeURIComponent(bountyFromUrl));
+        } else if (bountyData.length > 0) {
+          setSelectedBounty(bountyData[0].name);
+        }
+      }
 
-  // handleFileChange wrapped with useCallback
-  const handleFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+      // Fetch the site setting to see if a password is required
+      const { data: settingsData, error: settingsError } = await supabase.from('settings').select('is_password_required').eq('id', 1).single();
+      if (settingsError) { console.error('Error fetching settings:', settingsError); }
+      else if (settingsData) {
+        setIsPasswordRequired(settingsData.is_password_required);
+      }
+    };
+
+    initializePage();
+  }, [searchParams]); // searchParams is a dependency for this useEffect, now it's okay because this component is client-rendered within Suspense
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     setSelectedFile(null); setSubmitStatus({ message: '', type: '' });
     const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
     const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
+
+      // 1. Check file type
       if (!allowedTypes.includes(file.type)) { setSubmitStatus({ message: "Invalid file type. Please select a PNG, JPG, GIF, or WEBP.", type: 'error' }); e.target.value = ''; return; }
+      // 2. Check file size
       if (file.size > MAX_FILE_SIZE) { setSubmitStatus({ message: `File size cannot exceed 50MB.`, type: 'error' }); e.target.value = ''; return; }
+
+      // If all checks pass, set the file
       setSelectedFile(file);
     }
-  }, []); // No dependencies for handleFileChange
+  };
 
-  // handleSubmit wrapped with useCallback
-  const handleSubmit = useCallback(async (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedFile || !playerName) {
       setSubmitStatus({ message: 'Player name and screenshot are required.', type: 'error' });
@@ -90,15 +93,19 @@ function SubmitFormContent() {
     setSubmitStatus({ message: 'Submitting...', type: 'info' });
 
     try {
+      // 1. Upload the image first
       const fileExt = selectedFile.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
       const { error: uploadError } = await supabase.storage.from('proof-images').upload(fileName, selectedFile);
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from('proof-images').getPublicUrl(fileName);
 
+      // 2. Call our secure RPC function
       const { error: rpcError } = await supabase.rpc('submit_achievement', {
-        payload: {
-          player_name_in: playerName, submission_type_in: submissionType, proof_image_url_in: urlData.publicUrl,
+        payload: { // Pass all arguments inside a single 'payload' object
+          player_name_in: playerName,
+          submission_type_in: submissionType,
+          proof_image_url_in: urlData.publicUrl,
           bounty_name_in: submissionType === 'bounty' ? selectedBounty : null,
           bounty_tier_in: submissionType === 'bounty' ? bounties.find(b => b.name === selectedBounty)?.tier : null,
           pb_category_in: submissionType === 'personal_best' ? pbCategory : null,
@@ -109,18 +116,22 @@ function SubmitFormContent() {
 
       if (rpcError) throw rpcError;
 
+      // 3. If successful, reset the form
       setSubmitStatus({ message: 'Submission successful! Awaiting admin approval.', type: 'success' });
       const form = e.target as HTMLFormElement;
       form.reset();
       setPlayerName(''); setPbTime(''); setSelectedFile(null); setUserEnteredPassword('');
     } catch (error: any) {
       console.error('Submission Error:', error);
-      if (error.message.includes('Invalid submission password')) { setSubmitStatus({ message: 'The submission password was incorrect.', type: 'error' }); }
-      else { setSubmitStatus({ message: `An unexpected error occurred: ${error.message}`, type: 'error' }); }
+      if (error.message.includes('Invalid submission password')) {
+        setSubmitStatus({ message: 'The submission password was incorrect.', type: 'error' });
+      } else {
+        setSubmitStatus({ message: `An unexpected error occurred: ${error.message}`, type: 'error' });
+      }
     } finally {
       setLoading(false);
     }
-  }, [selectedFile, playerName, submissionType, selectedBounty, pbCategory, pbTime, userEnteredPassword, bounties]); // Dependencies for handleSubmit
+  };
 
   return (
     <>
