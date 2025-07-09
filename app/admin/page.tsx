@@ -1,4 +1,4 @@
-// app/admin/page.tsx - FINAL VERSION
+// app/admin/page.tsx - FINAL BUILD FIX
 
 'use client';
 
@@ -8,8 +8,20 @@ import AdminLogin from '@/components/AdminLogin';
 import Header from '@/components/Header';
 import type { User } from '@supabase/supabase-js';
 
-// Interfaces
-interface Submission { id: number; created_at: string; player_name: string; submission_type: string; bounty_name: string | null; personal_best_category: string | null; proof_image_url: string; is_archived: boolean; status: string; }
+// --- THIS IS THE CORRECTED INTERFACE ---
+interface Submission {
+  id: number;
+  created_at: string;
+  player_name: string;
+  submission_type: string;
+  bounty_name: string | null;
+  bounty_tier: 'low' | 'medium' | 'high' | null; // Added
+  personal_best_category: string | null;
+  personal_best_time: string | null; // Added
+  proof_image_url: string;
+  is_archived: boolean;
+  status: string;
+}
 interface Bounty { id: number; name: string; tier: string; image_url: string; is_active: boolean; created_at: string; }
 
 export default function AdminPage() {
@@ -17,29 +29,24 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('post');
 
-  // State for all tabs
   const [pendingSubmissions, setPendingSubmissions] = useState<Submission[]>([]);
   const [bounties, setBounties] = useState<Bounty[]>([]);
   const [personalBests, setPersonalBests] = useState<Submission[]>([]);
 
-  // State for bounty form
   const [newBountyName, setNewBountyName] = useState('');
   const [newBountyTier, setNewBountyTier] = useState('low');
   const [newBountyFile, setNewBountyFile] = useState<File | null>(null);
   const [isSubmittingBounty, setIsSubmittingBounty] = useState(false);
 
-  // State for Site Settings Tab
   const [isPasswordRequired, setIsPasswordRequired] = useState(false);
   const [submissionPassword, setSubmissionPassword] = useState('');
   const [settingsStatus, setSettingsStatus] = useState('');
 
-  // --- Fetching Functions ---
   const fetchPendingSubmissions = async () => { const { data, error } = await supabase.from('submissions').select('*').eq('status', 'pending').order('created_at', { ascending: true }); if (error) console.error('Error fetching pending submissions:', error); else setPendingSubmissions(data || []); };
   const fetchBounties = async () => { const { data, error } = await supabase.from('bounties').select('*').order('created_at', { ascending: false }); if (error) console.error('Error fetching bounties:', error); else setBounties(data || []); };
   const fetchPersonalBests = async () => { const { data, error } = await supabase.from('submissions').select('*').eq('status', 'approved').eq('submission_type', 'personal_best').order('created_at', { ascending: false }); if (error) console.error('Error fetching PBs:', error); else setPersonalBests((data as Submission[]) || []); };
   const fetchSettings = async () => { const { data, error } = await supabase.from('settings').select('*').eq('id', 1).single(); if (error) { console.error("Error fetching settings:", error); } else if (data) { setIsPasswordRequired(data.is_password_required); setSubmissionPassword(data.submission_password || ''); } };
 
-  // --- Core Auth Function ---
   const checkUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     const currentUser = session?.user ?? null;
@@ -52,9 +59,8 @@ export default function AdminPage() {
 
   useEffect(() => { checkUser(); }, []);
 
-  // --- Handler Functions ---
   const handleUpdateStatus = async (id: number, status: 'approved' | 'rejected') => { const { error } = await supabase.from('submissions').update({ status }).eq('id', id); if (error) { alert(`Error: ${error.message}`); } else { await fetchPendingSubmissions(); if (status === 'approved') { await fetchPersonalBests(); } } };
-  const handleBountyFileChange = (e: ChangeEvent<HTMLInputElement>) => { setNewBountyFile(null); if (e.target.files && e.target.files.length > 0) { const file = e.target.files[0]; const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']; if (!allowedTypes.includes(file.type)) { alert("Invalid file type. Please upload a PNG, JPG, GIF, or WEBP image."); e.target.value = ''; return; } setNewBountyFile(file); } };
+  const handleBountyFileChange = (e: ChangeEvent<HTMLInputElement>) => { setNewBountyFile(null); if (e.target.files && e.target.files.length > 0) { const file = e.target.files[0]; const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']; if (!allowedTypes.includes(file.type)) { alert("Invalid file type. Please upload an image."); e.target.value = ''; return; } setNewBountyFile(file); } };
   const handleBountySubmit = async (e: FormEvent) => { e.preventDefault(); if (!newBountyFile || !newBountyName) return; setIsSubmittingBounty(true); try { const fileName = `${Date.now()}.${newBountyFile.name.split('.').pop()}`; const { error: uError } = await supabase.storage.from('bounty-images').upload(fileName, newBountyFile); if (uError) throw uError; const { data: urlData } = supabase.storage.from('bounty-images').getPublicUrl(fileName); const { error: iError } = await supabase.from('bounties').insert([{ name: newBountyName, tier: newBountyTier, image_url: urlData.publicUrl, is_active: true }]); if (iError) throw iError; setNewBountyName(''); setNewBountyTier('low'); setNewBountyFile(null); const form = e.target as HTMLFormElement; form.reset(); await fetchBounties(); } catch (error: any) { alert(`Error: ${error.message}`); } finally { setIsSubmittingBounty(false); } };
   const handleBountyArchive = async (id: number, currentStatus: boolean) => { const { error } = await supabase.from('bounties').update({ is_active: !currentStatus }).eq('id', id); if (error) alert(`Error: ${error.message}`); else await fetchBounties(); };
   const handlePbArchive = async (id: number, currentStatus: boolean) => { const { error } = await supabase.from('submissions').update({ is_archived: !currentStatus }).eq('id', id); if (error) alert(`Error updating PB: ${error.message}`); else await fetchPersonalBests(); };
