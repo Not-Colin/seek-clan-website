@@ -41,6 +41,7 @@ export default function Home() {
   const [activeBounties, setActiveBounties] = useState(0);
   const [totalBountiesClaimed, setTotalBountiesClaimed] = useState({ low: 0, medium: 0, high: 0, total: 0 });
   const [totalRewards, setTotalRewards] = useState('0 GP');
+  const [topThreeThisMonth, setTopThreeThisMonth] = useState<PlayerStats[]>([]); // Still calculating, even if not explicitly shown
   const [recentSubmissions, setRecentSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -48,8 +49,7 @@ export default function Home() {
   const [topEHB, setTopEHB] = useState<ClanMember[]>([]);
   const [topEHP, setTopEHP] = useState<ClanMember[]>([]);
 
-  // --- TYPE GUARD FUNCTION ---
-  // This function tells TypeScript that a tier is one of the valid bounty types.
+  // --- TYPE GUARD FUNCTION (Defined outside useEffect to be stable) ---
   const isValidTier = (t: string | null): t is 'low' | 'medium' | 'high' => {
     return t === 'low' || t === 'medium' || t === 'high';
   };
@@ -80,10 +80,9 @@ export default function Home() {
           const bountyStats = { low: 0, medium: 0, high: 0, total: 0 };
           let totalRewardValue = 0;
 
-          // --- Apply Type Guard for bountyStats ---
           approvedBounties.forEach(bounty => {
             const tier = bounty.bounty_tier;
-            if (isValidTier(tier)) { // Use the type guard here
+            if (isValidTier(tier)) {
               bountyStats[tier]++;
             }
             bountyStats.total++;
@@ -93,30 +92,25 @@ export default function Home() {
           setTotalBountiesClaimed(bountyStats);
           setTotalRewards(`${totalRewardValue}M GP`);
 
-          // --- Calculate Top 3 Players ---
-          // Using 'any' for playerStats to allow dynamic property assignment based on player name
+          // --- Calculate Top 3 Players (for topThreeThisMonth state) ---
           const playerStats: { [key: string]: PlayerStats } = {};
           approvedBounties.forEach(bounty => {
             if (!playerStats[bounty.player_name]) {
               playerStats[bounty.player_name] = { playerName: bounty.player_name, low: 0, medium: 0, high: 0, totalBounties: 0, totalEarned: '0M GP' };
             }
             const stats = playerStats[bounty.player_name];
-            const tier = bounty.bounty_tier; // Get the tier
+            const tier = bounty.bounty_tier;
 
-            // --- Apply Type Guard for PlayerStats ---
-            if (isValidTier(tier)) { // Use the type guard here
-              stats[tier]++; // Safe to index now
+            if (isValidTier(tier)) {
+              stats[tier]++;
             }
             stats.totalBounties++;
             const earnings = tier === 'low' ? 2 : tier === 'medium' ? 5 : 10;
             const currentEarnings = parseInt(stats.totalEarned) || 0;
             stats.totalEarned = `${currentEarnings + earnings}M GP`;
           });
-          // Note: If no bounties claimed, sortedPlayers will be empty array, which is handled in JSX
-          // The previous code had a redundant 'topThreeThisMonth' state/calculation. Removing it for simplicity.
-          // This dashboard doesn't display 'topThreeThisMonth' in the JSX directly anymore
-          // Only 'Recent Submissions' is displayed.
-          // If you need 'topThreeThisMonth' displayed, let me know and I can add it back with this type safety.
+          const sortedPlayers = Object.values(playerStats).sort((a, b) => (parseInt(b.totalEarned) || 0) - (parseInt(a.totalEarned) || 0)).slice(0, 3);
+          setTopThreeThisMonth(sortedPlayers); // Set the state here
 
           // --- Get Recent Submissions (last 5, any status) ---
           const recentSubs = allSubmissions.slice(0, 5).map(sub => ({
@@ -147,15 +141,16 @@ export default function Home() {
     };
 
     loadDashboardData();
-  }, []);
+  }, []); // Empty dependency array, functions are defined to be stable
 
+  // --- Helper functions (defined outside component to prevent re-creation warnings) ---
   const getTimeAgo = (dateString: string) => {
     const now = new Date(); const date = new Date(dateString); const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000); if (diffInSeconds < 60) return 'Just now'; const diffInMinutes = Math.floor(diffInSeconds / 60); if (diffInMinutes < 60) return `${diffInMinutes}m ago`; const diffInHours = Math.floor(diffInMinutes / 60); if (diffInHours < 24) return `${diffInHours}h ago`; const diffInDays = Math.floor(diffInHours / 24); return `${diffInDays}d ago`;
   };
 
   const getStatusColor = (status: string) => {
     switch (status) { case 'Approved': return 'bg-green-500/20 text-green-400'; case 'Pending': return 'bg-yellow-500/20 text-yellow-400'; case 'Rejected': return 'bg-red-500/20 text-red-400'; default: return 'bg-gray-500/20 text-gray-400'; }
-  }
+  };
 
   const stats = [
     { title: 'Total Bounties Claimed', value: totalBountiesClaimed.total, icon: 'ri-trophy-line' },

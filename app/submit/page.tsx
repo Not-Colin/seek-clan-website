@@ -1,4 +1,4 @@
-// app/submit/page.tsx - FINAL CORRECTED CODE (VERIFIED WITH SUSPENSE)
+// app/submit/page.tsx - FINAL CORRECTED CODE (VERIFIED WITH SUSPENSE AND ALL FEATURES)
 
 'use client';
 
@@ -39,6 +39,7 @@ export default function SubmitPage() {
   const [userEnteredPassword, setUserEnteredPassword] = useState('');
 
   useEffect(() => {
+    // This function runs on page load to get necessary data
     const initializePage = async () => {
       // Fetch Bounties for the dropdown
       const { data: bountyData, error: bountyError } = await supabase.from('bounties').select('id, name, tier').eq('is_active', true);
@@ -70,8 +71,13 @@ export default function SubmitPage() {
     const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
-      if (!allowedTypes.includes(file.type)) { setSubmitStatus({ message: "Invalid file type. Please select an image.", type: 'error' }); e.target.value = ''; return; }
+
+      // 1. Check file type
+      if (!allowedTypes.includes(file.type)) { setSubmitStatus({ message: "Invalid file type. Please select a PNG, JPG, GIF, or WEBP.", type: 'error' }); e.target.value = ''; return; }
+      // 2. Check file size
       if (file.size > MAX_FILE_SIZE) { setSubmitStatus({ message: `File size cannot exceed 50MB.`, type: 'error' }); e.target.value = ''; return; }
+
+      // If all checks pass, set the file
       setSelectedFile(file);
     }
   };
@@ -86,12 +92,14 @@ export default function SubmitPage() {
     setSubmitStatus({ message: 'Submitting...', type: 'info' });
 
     try {
+      // 1. Upload the image first
       const fileExt = selectedFile.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
       const { error: uploadError } = await supabase.storage.from('proof-images').upload(fileName, selectedFile);
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from('proof-images').getPublicUrl(fileName);
 
+      // 2. Call our secure RPC function
       const { error: rpcError } = await supabase.rpc('submit_achievement', {
         payload: { // Pass all arguments inside a single 'payload' object
           player_name_in: playerName,
@@ -107,6 +115,7 @@ export default function SubmitPage() {
 
       if (rpcError) throw rpcError;
 
+      // 3. If successful, reset the form
       setSubmitStatus({ message: 'Submission successful! Awaiting admin approval.', type: 'success' });
       const form = e.target as HTMLFormElement;
       form.reset();
