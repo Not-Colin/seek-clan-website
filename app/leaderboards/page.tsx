@@ -1,4 +1,4 @@
-// app/leaderboards/page.tsx
+// app/leaderboards/page.tsx - FINAL BUILD FIX
 
 'use client';
 
@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
 import { supabase } from '@/lib/supabaseClient';
 
-// --- 1. DEFINE THE PRESET LIST OF CATEGORIES (must match the submit page) ---
+// --- 1. DEFINE THE PRESET LIST OF CATEGORIES ---
 const pbCategories = [
   'All Personal Bests', // Add an "All" option for the default view
   'Challenge Mode Chambers of Xeric',
@@ -20,8 +20,27 @@ const pbCategories = [
   'Tombs of Amascut',
 ];
 
-interface Submission { id: number; player_name: string; submission_type: string; bounty_tier: 'low' | 'medium' | 'high'; personal_best_category: string; personal_best_time: string; proof_image_url: string; is_archived: boolean; }
-interface BountyHunterStat { name: string; low: number; medium: number; high: number; totalBounties: number; totalGP: number; }
+// --- INTERFACES ---
+interface Submission {
+  id: number;
+  player_name: string;
+  submission_type: string;
+  bounty_tier: 'low' | 'medium' | 'high' | null; // Nullable to match DB
+  personal_best_category: string | null; // Nullable to match DB
+  personal_best_time: string | null; // Nullable to match DB
+  proof_image_url: string;
+  is_archived: boolean;
+  status: string; // Added for completeness, though filtered for 'approved'
+}
+
+interface BountyHunterStat {
+  name: string;
+  low: number;
+  medium: number;
+  high: number;
+  totalBounties: number;
+  totalGP: number;
+}
 
 export default function LeaderboardsPage() {
   const [activeTab, setActiveTab] = useState('bountyHunters');
@@ -29,48 +48,59 @@ export default function LeaderboardsPage() {
   const [personalBests, setPersonalBests] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // --- 2. NEW STATE FOR THE PB FILTER ---
   const [selectedPbCategory, setSelectedPbCategory] = useState(pbCategories[0]);
 
   useEffect(() => {
     const fetchLeaderboardData = async () => {
       setLoading(true);
+      // Fetch only approved and non-archived submissions from the database
       const { data, error } = await supabase.from('submissions').select('*').eq('status', 'approved').eq('is_archived', false);
+
       if (error) {
         console.error("Error fetching leaderboards:", error);
       } else if (data) {
-        // ... (Bounty hunter processing remains unchanged)
+        // --- Process Bounty Hunters ---
         const bountySubmissions = data.filter(s => s.submission_type === 'bounty');
         const playerStats: { [key: string]: BountyHunterStat } = {};
+
         bountySubmissions.forEach(sub => {
           if (!playerStats[sub.player_name]) {
             playerStats[sub.player_name] = { name: sub.player_name, low: 0, medium: 0, high: 0, totalBounties: 0, totalGP: 0 };
           }
           const stats = playerStats[sub.player_name];
+          const tier = sub.bounty_tier; // Get the tier from the submission
 
-          // --- THIS IS THE FIX ---
-          // First, check if bounty_tier is a valid key ('low', 'medium', or 'high')
-          if (sub.bounty_tier && (sub.bounty_tier === 'low' || sub.bounty_tier === 'medium' || sub.bounty_tier === 'high')) {
-            stats[sub.bounty_tier]++; // Now TypeScript knows this is safe
+          // --- THIS IS THE TYPE GUARD FIX ---
+          // Define a type guard function within the loop or globally if preferred
+          const isValidTier = (t: string | null): t is 'low' | 'medium' | 'high' => {
+            return t === 'low' || t === 'medium' || t === 'high';
+          };
+
+          if (isValidTier(tier)) {
+            // Now TypeScript knows 'tier' is safe to use as an index for stats
+            stats[tier]++;
           }
           // --- END OF FIX ---
 
           stats.totalBounties++;
-          stats.totalGP += sub.bounty_tier === 'low' ? 2 : sub.bounty_tier === 'medium' ? 5 : 10;
+          stats.totalGP += tier === 'low' ? 2 : tier === 'medium' ? 5 : 10;
         });
+
         setBountyHunters(Object.values(playerStats).sort((a, b) => b.totalGP - a.totalGP));
 
+        // --- Process Personal Bests ---
         const pbSubmissions = data.filter(s => s.submission_type === 'personal_best');
         setPersonalBests(pbSubmissions);
       }
       setLoading(false);
     };
+
     fetchLeaderboardData();
   }, []);
 
-  // --- 3. HELPER FUNCTION TO CONVERT TIME STRING TO SECONDS FOR SORTING ---
-  const timeToSeconds = (time: string): number => {
-    // Expected formats: "MM:SS.ms" or "SS.ms"
+  // --- HELPER FUNCTION TO CONVERT TIME STRING TO SECONDS FOR SORTING ---
+  const timeToSeconds = (time: string | null): number => {
+    if (!time) return Infinity; // Handle null times gracefully
     const parts = time.split(':');
     let seconds = 0;
     if (parts.length === 2) { // MM:SS.ms
@@ -79,10 +109,10 @@ export default function LeaderboardsPage() {
     } else if (parts.length === 1) { // SS.ms
       seconds += parseFloat(parts[0]);
     }
-    return seconds || Infinity; // Return Infinity for invalid formats to push them to the bottom
+    return seconds || Infinity;
   };
 
-  // --- 4. FILTER AND SORT THE PBs TO BE DISPLAYED ---
+  // --- FILTER AND SORT THE PBs TO BE DISPLAYED ---
   const filteredAndSortedPBs = personalBests
     .filter(pb => selectedPbCategory === 'All Personal Bests' || pb.personal_best_category === selectedPbCategory)
     .sort((a, b) => timeToSeconds(a.personal_best_time) - timeToSeconds(b.personal_best_time));
@@ -98,11 +128,9 @@ export default function LeaderboardsPage() {
           {loading ? (<p className="text-center text-gray-400">Loading...</p>) : (
             <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
               {activeTab === 'bountyHunters' ? (
-                // ... (Bounty Hunters table is unchanged) ...
                 bountyHunters.length === 0 ? <p className="text-center text-gray-400">No approved bounties yet.</p> : (<table className="w-full text-left"><thead><tr className="border-b border-slate-700"><th className="p-3 text-gray-400 font-medium text-sm">Rank</th><th className="p-3 text-gray-400 font-medium text-sm">Player</th><th className="p-3 text-gray-400 font-medium text-sm">Low</th><th className="p-3 text-gray-400 font-medium text-sm">Medium</th><th className="p-3 text-gray-400 font-medium text-sm">High</th><th className="p-3 text-gray-400 font-medium text-sm">Total GP Earned</th></tr></thead><tbody>{bountyHunters.map((player, index) => (<tr key={player.name} className="border-b border-slate-800 hover:bg-slate-700/20"><td className="p-3 text-white font-bold">#{index + 1}</td><td className="p-3 text-white">{player.name}</td><td className="p-3 text-gray-300">{player.low}</td><td className="p-3 text-gray-300">{player.medium}</td><td className="p-3 text-gray-300">{player.high}</td><td className="p-3 text-green-400 font-medium">{player.totalGP}M GP</td></tr>))}</tbody></table>)
               ) : (
                 <>
-                  {/* --- 5. ADD THE DROPDOWN FILTER UI --- */}
                   <div className="mb-4">
                     <label htmlFor="pbFilter" className="text-sm font-medium text-gray-300 mr-2">Filter by Category:</label>
                     <select
@@ -126,7 +154,6 @@ export default function LeaderboardsPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {/* --- 6. RENDER THE FILTERED AND SORTED LIST --- */}
                         {filteredAndSortedPBs.map((pb, index) => (
                            <tr key={pb.id} className="border-b border-slate-800 hover:bg-slate-700/20">
                             <td className="p-3 text-white font-bold">#{index + 1}</td>
