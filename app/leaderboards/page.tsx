@@ -1,46 +1,49 @@
-// app/leaderboards/page.tsx - FINAL CORRECTED CODE (VERIFIED)
+// app/leaderboards/page.tsx - FINAL UI RESTORED + FUNCTIONALITY PRESERVED
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react'; // Added useCallback
 import Header from '@/components/Header';
 import { supabase } from '@/lib/supabaseClient';
 
-// --- PRESET LIST OF PB CATEGORIES ---
+// --- PRESET LIST OF PB CATEGORIES (defined globally) ---
 const pbCategories = [
-  'All Personal Bests', // Add an "All" option for the default view
-  'Challenge Mode Chambers of Xeric',
-  'Chambers of Xeric',
-  'Fight Caves',
-  'Fortis Colosseum',
-  'Inferno',
-  'Theatre of Blood',
-  'Theatre of Blood: Hard Mode',
-  'Tombs of Amascut: Expert Mode',
-  'Tombs of Amascut',
+  'All Personal Bests',
+  'Challenge Mode Chambers of Xeric', 'Chambers of Xeric', 'Fight Caves', 'Fortis Colosseum',
+  'Inferno', 'Theatre of Blood', 'Theatre of Blood: Hard Mode', 'Tombs of Amascut: Expert Mode', 'Tombs of Amascut',
 ];
 
 // --- INTERFACES ---
 interface Submission {
-  id: number;
-  player_name: string;
-  submission_type: string;
-  bounty_tier: 'low' | 'medium' | 'high' | null; // Nullable to match DB
-  personal_best_category: string | null; // Nullable to match DB
-  personal_best_time: string | null; // Nullable to match DB
-  proof_image_url: string;
-  is_archived: boolean;
-  status: string; // Added for completeness, though filtered for 'approved'
+  id: number; player_name: string; submission_type: string;
+  bounty_tier: 'low' | 'medium' | 'high' | null;
+  personal_best_category: string | null; personal_best_time: string | null;
+  proof_image_url: string; is_archived: boolean; status: string;
 }
 
 interface BountyHunterStat {
-  name: string;
-  low: number;
-  medium: number;
-  high: number;
-  totalBounties: number;
-  totalGP: number;
+  name: string; low: number; medium: number; high: number;
+  totalBounties: number; totalGP: number;
 }
+
+// --- HELPER FUNCTIONS (Defined globally to be stable) ---
+const timeToSeconds = (time: string | null): number => {
+  if (!time) return Infinity;
+  const parts = time.split(':');
+  let seconds = 0;
+  if (parts.length === 2) {
+    seconds += parseInt(parts[0], 10) * 60;
+    seconds += parseFloat(parts[1]);
+  } else if (parts.length === 1) {
+    seconds += parseFloat(parts[0]);
+  }
+  return seconds || Infinity;
+};
+
+const isValidTier = (t: string | null): t is 'low' | 'medium' | 'high' => {
+  return t === 'low' || t === 'medium' || t === 'high';
+};
+
 
 export default function LeaderboardsPage() {
   const [activeTab, setActiveTab] = useState('bountyHunters');
@@ -50,16 +53,15 @@ export default function LeaderboardsPage() {
 
   const [selectedPbCategory, setSelectedPbCategory] = useState(pbCategories[0]);
 
+  // Main data fetching effect
   useEffect(() => {
     const fetchLeaderboardData = async () => {
       setLoading(true);
-      // Fetch only approved and non-archived submissions from the database
       const { data, error } = await supabase.from('submissions').select('*').eq('status', 'approved').eq('is_archived', false);
 
       if (error) {
         console.error("Error fetching leaderboards:", error);
       } else if (data) {
-        // --- Process Bounty Hunters ---
         const bountySubmissions = data.filter(s => s.submission_type === 'bounty');
         const playerStats: { [key: string]: BountyHunterStat } = {};
 
@@ -68,27 +70,18 @@ export default function LeaderboardsPage() {
             playerStats[sub.player_name] = { name: sub.player_name, low: 0, medium: 0, high: 0, totalBounties: 0, totalGP: 0 };
           }
           const stats = playerStats[sub.player_name];
-          const tier = sub.bounty_tier; // Get the tier from the submission
-
-          // --- TYPE GUARD FOR BOUNTY TIERS ---
-          // Defines a type guard function to check if the tier is valid
-          const isValidTier = (t: string | null): t is 'low' | 'medium' | 'high' => {
-            return t === 'low' || t === 'medium' || t === 'high';
-          };
+          const tier = sub.bounty_tier;
 
           if (isValidTier(tier)) {
-            // Now TypeScript knows 'tier' is safe to use as an index for stats
             stats[tier]++;
           }
-          // --- END OF TYPE GUARD FIX ---
 
           stats.totalBounties++;
-          stats.totalGP += tier === 'low' ? 2 : tier === 'medium' ? 5 : 10; // Use 'tier' directly here
+          stats.totalGP += tier === 'low' ? 2 : tier === 'medium' ? 5 : 10;
         });
 
         setBountyHunters(Object.values(playerStats).sort((a, b) => b.totalGP - a.totalGP));
 
-        // --- Process Personal Bests ---
         const pbSubmissions = data.filter(s => s.submission_type === 'personal_best');
         setPersonalBests(pbSubmissions);
       }
@@ -96,23 +89,9 @@ export default function LeaderboardsPage() {
     };
 
     fetchLeaderboardData();
-  }, []);
+  }, []); // Empty dependency array as fetchLeaderboardData is stable (or implicitly stable because it's called immediately)
 
-  // --- HELPER FUNCTION TO CONVERT TIME STRING TO SECONDS FOR SORTING ---
-  const timeToSeconds = (time: string | null): number => {
-    if (!time) return Infinity; // Handle null times gracefully
-    const parts = time.split(':');
-    let seconds = 0;
-    if (parts.length === 2) { // MM:SS.ms (e.g., "15:30.4")
-      seconds += parseInt(parts[0], 10) * 60;
-      seconds += parseFloat(parts[1]);
-    } else if (parts.length === 1) { // SS.ms (e.g., "30.4")
-      seconds += parseFloat(parts[0]);
-    }
-    return seconds || Infinity; // Return Infinity for invalid formats to push them to the bottom
-  };
 
-  // --- FILTER AND SORT THE PBs TO BE DISPLAYED ---
   const filteredAndSortedPBs = personalBests
     .filter(pb => selectedPbCategory === 'All Personal Bests' || pb.personal_best_category === selectedPbCategory)
     .sort((a, b) => timeToSeconds(a.personal_best_time) - timeToSeconds(b.personal_best_time));

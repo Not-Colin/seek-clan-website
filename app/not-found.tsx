@@ -1,3 +1,5 @@
+// app/not-found.tsx - SHOULD BE VISUALLY FINE
+
 export default function NotFound() {
     return (
       <div className="flex flex-col items-center justify-center h-screen text-center px-4">

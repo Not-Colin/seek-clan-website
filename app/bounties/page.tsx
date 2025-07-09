@@ -1,8 +1,8 @@
-// app/bounties/page.tsx - WITH IMG WARNING SUPPRESSION
+// app/bounties/page.tsx - FINAL UI RESTORED + FUNCTIONALITY PRESERVED
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react'; // <-- ADD useCallback HERE
+import { useState, useEffect, useCallback } from 'react'; // Added useCallback
 import Header from '@/components/Header';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
@@ -18,7 +18,7 @@ export default function BountiesPage() {
   const [activeBounties, setActiveBounties] = useState<Bounty[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Wrap fetchBounties with useCallback
+  // fetchBounties wrapped with useCallback for stability
   const fetchBounties = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -33,11 +33,11 @@ export default function BountiesPage() {
       setActiveBounties(data as Bounty[]);
     }
     setLoading(false);
-  }, []); // Empty dependency array because fetchBounties doesn't depend on any external changing state/props
+  }, []); // No dependencies for fetchBounties itself, as setters are stable
 
   useEffect(() => {
     fetchBounties();
-  }, [fetchBounties]); // Now fetchBounties is a stable reference, so the useEffect won't run unnecessarily
+  }, [fetchBounties]); // useEffect dependency includes the stable fetchBounties
 
   const tierDetails = {
     high: { reward: '10M GP', color: 'border-red-500/50 bg-red-500/10' },

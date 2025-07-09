@@ -1,3 +1,5 @@
+// app/settings/page.tsx - SHOULD BE VISUALLY FINE
+
 'use client';
 
 import Header from '../../components/Header';
