@@ -1,4 +1,4 @@
-// app/leaderboards/page.tsx - FINAL BUILD FIX
+// app/leaderboards/page.tsx - FINAL CORRECTED CODE (VERIFIED)
 
 'use client';
 
@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
 import { supabase } from '@/lib/supabaseClient';
 
-// --- 1. DEFINE THE PRESET LIST OF CATEGORIES ---
+// --- PRESET LIST OF PB CATEGORIES ---
 const pbCategories = [
   'All Personal Bests', // Add an "All" option for the default view
   'Challenge Mode Chambers of Xeric',
@@ -70,8 +70,8 @@ export default function LeaderboardsPage() {
           const stats = playerStats[sub.player_name];
           const tier = sub.bounty_tier; // Get the tier from the submission
 
-          // --- THIS IS THE TYPE GUARD FIX ---
-          // Define a type guard function within the loop or globally if preferred
+          // --- TYPE GUARD FOR BOUNTY TIERS ---
+          // Defines a type guard function to check if the tier is valid
           const isValidTier = (t: string | null): t is 'low' | 'medium' | 'high' => {
             return t === 'low' || t === 'medium' || t === 'high';
           };
@@ -80,10 +80,10 @@ export default function LeaderboardsPage() {
             // Now TypeScript knows 'tier' is safe to use as an index for stats
             stats[tier]++;
           }
-          // --- END OF FIX ---
+          // --- END OF TYPE GUARD FIX ---
 
           stats.totalBounties++;
-          stats.totalGP += tier === 'low' ? 2 : tier === 'medium' ? 5 : 10;
+          stats.totalGP += tier === 'low' ? 2 : tier === 'medium' ? 5 : 10; // Use 'tier' directly here
         });
 
         setBountyHunters(Object.values(playerStats).sort((a, b) => b.totalGP - a.totalGP));
@@ -103,13 +103,13 @@ export default function LeaderboardsPage() {
     if (!time) return Infinity; // Handle null times gracefully
     const parts = time.split(':');
     let seconds = 0;
-    if (parts.length === 2) { // MM:SS.ms
+    if (parts.length === 2) { // MM:SS.ms (e.g., "15:30.4")
       seconds += parseInt(parts[0], 10) * 60;
       seconds += parseFloat(parts[1]);
-    } else if (parts.length === 1) { // SS.ms
+    } else if (parts.length === 1) { // SS.ms (e.g., "30.4")
       seconds += parseFloat(parts[0]);
     }
-    return seconds || Infinity;
+    return seconds || Infinity; // Return Infinity for invalid formats to push them to the bottom
   };
 
   // --- FILTER AND SORT THE PBs TO BE DISPLAYED ---
