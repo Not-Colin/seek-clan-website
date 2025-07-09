@@ -43,9 +43,20 @@ export default function LeaderboardsPage() {
         const bountySubmissions = data.filter(s => s.submission_type === 'bounty');
         const playerStats: { [key: string]: BountyHunterStat } = {};
         bountySubmissions.forEach(sub => {
-          if (!playerStats[sub.player_name]) playerStats[sub.player_name] = { name: sub.player_name, low: 0, medium: 0, high: 0, totalBounties: 0, totalGP: 0 };
+          if (!playerStats[sub.player_name]) {
+            playerStats[sub.player_name] = { name: sub.player_name, low: 0, medium: 0, high: 0, totalBounties: 0, totalGP: 0 };
+          }
           const stats = playerStats[sub.player_name];
-          stats[sub.bounty_tier]++; stats.totalBounties++; stats.totalGP += sub.bounty_tier === 'low' ? 2 : sub.bounty_tier === 'medium' ? 5 : 10;
+
+          // --- THIS IS THE FIX ---
+          // First, check if bounty_tier is a valid key ('low', 'medium', or 'high')
+          if (sub.bounty_tier && (sub.bounty_tier === 'low' || sub.bounty_tier === 'medium' || sub.bounty_tier === 'high')) {
+            stats[sub.bounty_tier]++; // Now TypeScript knows this is safe
+          }
+          // --- END OF FIX ---
+
+          stats.totalBounties++;
+          stats.totalGP += sub.bounty_tier === 'low' ? 2 : sub.bounty_tier === 'medium' ? 5 : 10;
         });
         setBountyHunters(Object.values(playerStats).sort((a, b) => b.totalGP - a.totalGP));
 

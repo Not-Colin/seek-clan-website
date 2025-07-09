@@ -1,13 +1,14 @@
-import type { NextConfig } from "next";
+// eslint.config.mjs
+const next_plugin = require("@next/eslint-plugin-next");
 
-const nextConfig: NextConfig = {
-  output: "export",
-  images: {
-    unoptimized: true,
+module.exports = [
+  {
+    plugins: {
+      next: next_plugin,
+    },
+    rules: {
+      ...next_plugin.configs.recommended.rules,
+      ...next_plugin.configs["core-web-vitals"].rules,
+    },
   },
-  typescript: {
-    // ignoreBuildErrors: true,
-  },
-};
-
-export default nextConfig;
+];
