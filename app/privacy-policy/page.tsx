@@ -1,4 +1,4 @@
-// app/privacy-policy/page.tsx
+// app/privacy-policy/page.tsx - Fixed unescaped apostrophe error
 
 import Header from '@/components/Header';
 
