@@ -4,13 +4,13 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation'; // <-- Import useRouter
+import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
 
 export default function Header() {
   const pathname = usePathname();
-  const router = useRouter(); // <-- Initialize useRouter hook
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
@@ -20,33 +20,31 @@ export default function Header() {
     };
     checkUser();
 
-    // Listen for changes in auth state (e.g., login, logout) and update the UI
     const { data: { subscription } = {} } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      // Optional: If signed out from another tab, redirect if on admin page
       if (_event === 'SIGNED_OUT' && pathname.startsWith('/admin')) {
-        router.push('/'); // Redirect to home if on admin page and signed out
+        router.push('/');
       }
     });
 
-    // Cleanup the listener when the component unmounts
     return () => {
-      if (subscription) { // Ensure subscription exists before unsubscribing
+      if (subscription) {
         subscription.unsubscribe();
       }
     };
-  }, [pathname, router]); // Add pathname and router to dependencies
+  }, [pathname, router]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setUser(null); // Explicitly set user state to null for immediate UI update
-    router.push('/'); // Redirect to the dashboard/homepage after logging out
+    setUser(null);
+    router.push('/');
   };
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', href: '/' },
     { id: 'bounties', label: 'Current Bounties', href: '/bounties' },
     { id: 'leaderboards', label: 'Leaderboards', href: '/leaderboards' },
+    { id: 'ranks', label: 'Current Ranks', href: '/ranks' }, // <-- NEW RANK TAB HERE
     { id: 'submit', label: 'Submit Achievement', href: '/submit' },
     { id: 'history', label: 'History', href: '/history' },
   ];
@@ -73,7 +71,6 @@ export default function Header() {
                   {tab.label}
                 </Link>
               ))}
-              {/* If user is logged in, show the Admin tab */}
               {user && (
                  <Link
                   href="/admin"
@@ -90,20 +87,15 @@ export default function Header() {
           </div>
 
           <div className="flex items-center space-x-4">
-            {/* The Bell Icon is now removed */}
-
-            {/* --- NEW: Conditional Login/Logout Button --- */}
             {user ? (
-              // If user is logged in, show a Logout button
               <button
-                onClick={handleLogout} // This now calls our new handleLogout
+                onClick={handleLogout}
                 className="flex items-center space-x-2 text-gray-400 hover:text-red-400 transition-colors"
                 title="Logout"
               >
                 <i className="ri-logout-box-r-line text-xl"></i>
               </button>
             ) : (
-              // If user is not logged in, show a link to the admin page
               <Link
                 href="/admin"
                 className="flex items-center space-x-2 text-gray-400 hover:text-orange-400 transition-colors"
