@@ -1,8 +1,8 @@
-// app/api/refresh-clan-data/route.ts - With Cache Revalidation
+// app/api/refresh-clan-data/route.ts - With resilient JSON parsing
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { revalidatePath } from 'next/cache'; // Import the revalidation function
+import { revalidatePath } from 'next/cache';
 
 // --- Interfaces ---
 interface PlayerBountyCounts { low: number; medium: number; high: number; total: number; }
@@ -97,14 +97,20 @@ export async function POST(request: Request) {
             supabaseAdmin.from('submissions').select('player_name, bounty_tier').eq('status', 'approved').eq('submission_type', 'bounty'),
         ]);
 
+        // --- Resilient JSON Parsing ---
         if (!groupRes.ok) {
-            const errorText = await groupRes.text();
-            throw new Error(`Failed to fetch WOM group details: ${groupRes.statusText} - ${errorText}`);
+            throw new Error(`Failed to fetch WOM group details: Received status ${groupRes.status} ${groupRes.statusText}`);
         }
-        const groupData = await groupRes.json();
+        const groupResClone = groupRes.clone();
+        const groupData = await groupRes.json().catch(() => {
+            console.error("Failed to parse WOM response as JSON. Raw text:", groupResClone.text());
+            throw new Error("Wise Old Man API returned a non-JSON response. It may be down or rate-limiting.");
+        });
+        // --- End of Resilient Parsing ---
+
         const womMemberships = groupData.memberships;
         if (!Array.isArray(womMemberships)) {
-            throw new Error("Invalid WOM group data format: 'memberships' array not found.");
+            throw new Error("Invalid WOM group data format: 'memberships' array not found in the response.");
         }
 
         const { data: approvedSubmissions, error: submissionsError } = submissionsRes;
@@ -164,7 +170,6 @@ export async function POST(request: Request) {
         const { error: updateError } = await supabaseAdmin.from('clan_data').update({ data: computedData }).eq('id', 1);
         if (updateError) throw new Error(`Failed to save computed data: ${updateError.message}`);
 
-        // Purge the cache for the public-facing API route and any pages that use it.
         revalidatePath('/api/get-cached-clan-data');
         revalidatePath('/ranks');
         revalidatePath('/');
