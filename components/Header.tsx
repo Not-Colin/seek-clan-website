@@ -47,6 +47,7 @@ export default function Header() {
     { id: 'ranks', label: 'Current Ranks', href: '/ranks' }, // <-- NEW RANK TAB HERE
     { id: 'submit', label: 'Submit Achievement', href: '/submit' },
     { id: 'history', label: 'History', href: '/history' },
+    { id: 'tradelog', label: 'Payout Log', href: '/tradelog' },
   ];
 
   return (

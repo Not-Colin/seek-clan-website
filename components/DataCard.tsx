@@ -1,42 +1,33 @@
+// components/DataCard.tsx - Corrected and Simplified
+
 'use client';
+
+import React from 'react';
 
 interface DataCardProps {
   title: string;
   value: string | number;
-  change?: string;
   icon: string;
-  trend?: 'up' | 'down' | 'neutral';
+  className?: string; // Prop for the main wrapper div
+  iconBgClass?: string; // Prop specifically for the icon background
+  iconClass?: string; // Prop specifically for the icon itself
 }
 
-export default function DataCard({ title, value, change, icon, trend = 'neutral' }: DataCardProps) {
-  const getTrendColor = () => {
-    switch (trend) {
-      case 'up': return 'text-green-400';
-      case 'down': return 'text-red-400';
-      default: return 'text-gray-400';
-    }
-  };
-
-  const getTrendIcon = () => {
-    switch (trend) {
-      case 'up': return 'ri-arrow-up-line';
-      case 'down': return 'ri-arrow-down-line';
-      default: return 'ri-subtract-line';
-    }
-  };
+export default function DataCard({
+  title,
+  value,
+  icon,
+  className = "bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 hover:border-orange-500/50",
+  iconBgClass = "bg-orange-600/20",
+  iconClass = "text-orange-400"
+}: DataCardProps) {
 
   return (
-    <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 hover:border-blue-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10">
+    <div className={`rounded-xl p-6 transition-all duration-300 ${className}`}>
       <div className="flex items-center justify-between mb-4">
-        <div className="w-12 h-12 flex items-center justify-center bg-blue-600/20 rounded-lg">
-          <i className={`${icon} text-2xl text-blue-400`}></i>
+        <div className={`w-12 h-12 flex items-center justify-center rounded-lg ${iconBgClass}`}>
+          <i className={`${icon} text-2xl ${iconClass}`}></i>
         </div>
-        {change && (
-          <div className={`flex items-center space-x-1 ${getTrendColor()}`}>
-            <i className={`${getTrendIcon()} text-sm`}></i>
-            <span className="text-sm font-medium">{change}</span>
-          </div>
-        )}
       </div>
       <h3 className="text-gray-400 text-sm font-medium mb-2">{title}</h3>
       <p className="text-2xl font-bold text-white">{value}</p>

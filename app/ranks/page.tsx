@@ -1,4 +1,4 @@
-// app/ranks/page.tsx - Restored useCallback to fix loading issue
+// app/ranks/page.tsx - Simplified with backend revalidation
 
 'use client';
 
@@ -28,14 +28,13 @@ export default function RanksPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // CORRECTED: Restored useCallback to make the function reference stable
+  // A simple, stable fetch function
   const fetchRanks = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/get-cached-clan-data');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch ranks: ${response.statusText}`);
-      }
+      // Using cache: 'no-store' is a good practice to ensure the revalidated data is always fetched
+      const response = await fetch('/api/get-cached-clan-data', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Failed to fetch ranks');
       const data: ApiClanDataResponse = await response.json();
       setRankedPlayers(Array.isArray(data.rankedPlayers) ? data.rankedPlayers : []);
     } catch (error) {
@@ -44,9 +43,9 @@ export default function RanksPage() {
     } finally {
       setLoading(false);
     }
-  }, []); // Empty dependency array is correct here as it has no external dependencies
+  }, []);
 
-  // CORRECTED: useEffect now depends on the stable fetchRanks function
+  // This useEffect now runs only once when the component mounts
   useEffect(() => {
     fetchRanks();
   }, [fetchRanks]);
@@ -61,19 +60,20 @@ export default function RanksPage() {
       <main className="px-6 py-8">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-3xl font-bold mb-6 text-center text-white">Clan Ranks</h1>
-          <div className="mb-6">
+          <div className="my-6">
             <input
               type="text"
               placeholder="Search by player name..."
-              className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500"
+              className="w-full sm:flex-grow bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+
           {loading ? (
             <p className="text-center text-gray-400">Loading ranks...</p>
           ) : filteredPlayers.length === 0 ? (
-            <p className="text-center text-gray-400">No matching players found or no ranks computed yet.</p>
+            <p className="text-center text-gray-400">No matching players found.</p>
           ) : (
             <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -82,12 +82,20 @@ export default function RanksPage() {
                     <h3 className="text-xl font-bold text-orange-400 mb-2">{player.displayName}</h3>
                     <p className="text-lg font-semibold text-white mb-4">Rank: {player.currentRank}</p>
                     <div className="space-y-1 text-sm text-gray-300">
-                      <p>Account Type: <span className="font-semibold capitalize">{player.accountType}</span></p>
-                      <p>Hours to Max: <span className="font-semibold">{(player.ttm || 0).toLocaleString()}</span></p>
-                      <p>EHB: <span className="font-semibold">{(player.ehb || 0).toLocaleString()}</span></p>
-                      <p>EHP: <span className="font-semibold">{(player.ehp || 0).toLocaleString()}</span></p>
-                      <p>Total Bounties: <span className="font-semibold">{(player.bounties?.total || 0)}</span></p>
+                        <p>Account Type: <span className="font-semibold capitalize">{player.accountType}</span></p>
+                        <p>Hours to Max: <span className="font-semibold">{(player.ttm || 0).toLocaleString()}</span></p>
+                        <p>EHB: <span className="font-semibold">{(player.ehb || 0).toLocaleString()}</span></p>
+                        <p>EHP: <span className="font-semibold">{(player.ehp || 0).toLocaleString()}</span></p>
+                        <p>Total Bounties: <span className="font-semibold">{(player.bounties?.total || 0)}</span></p>
                     </div>
+                    {player.nextRankRequirements && player.nextRankRequirements.length > 0 && (
+                      <div className="mt-4">
+                        <p className="font-semibold text-blue-400 text-sm mb-1">Next Rank Goals:</p>
+                        <ul className="list-disc list-inside text-gray-400 text-xs">
+                          {player.nextRankRequirements.map((req, i) => <li key={i}>{req}</li>)}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
