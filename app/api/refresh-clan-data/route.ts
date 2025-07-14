@@ -1,4 +1,4 @@
-// app/api/refresh-clan-data/route.ts - FINAL with robust environment variable parsing
+// app/api/refresh-clan-data/route.ts - FINAL with advanced special role sorting
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -23,7 +23,26 @@ const RANK_DEFINITIONS = [
     { name: "Backpack", order: 1, criteria: [] },
 ];
 
-// --- Rank Calculation Function ---
+// --- START MODIFIED: Special Role Definitions & Sorting ---
+const SPECIAL_ROLES = new Set(['owner', 'deputy_owner', 'bandosian', 'minion']);
+
+const ROLE_DISPLAY_NAMES: { [key: string]: string } = {
+    owner: 'Clan Owner',
+    deputy_owner: 'Deputy Owner',
+    bandosian: 'Administrator',
+    minion: 'Alternate Account'
+};
+
+// New constant to define the sort order. Negative numbers will place them at the bottom.
+const ROLE_SORT_ORDER: { [key: string]: number } = {
+    minion: -1,       // Appears just below "Backpack" rank
+    bandosian: -2,    // Appears below minions
+    owner: -3,        // Appears at the very bottom
+    deputy_owner: -3  // Appears at the very bottom with owner
+};
+// --- END MODIFIED ---
+
+// --- Rank Calculation Function (Unchanged) ---
 function getPlayerRank(playerStats: { ehb: number; }, bountyCounts: PlayerBountyCounts): { rank: string; order: number; next: string[] } {
     let currentRank = "Backpack";
     let currentOrder = 1;
@@ -86,15 +105,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "WOM_GROUP_ID environment variable is not set on the server." }, { status: 500 });
     }
     const WOM_GROUP_ID = parseInt(womGroupIdString.trim(), 10);
-    if (isNaN(WOM_GROUP_ID)) {
-        return NextResponse.json({ error: `WOM_GROUP_ID is not a valid number. Received: '${womGroupIdString}'` }, { status: 500 });
+    if (isNaN(WOM_GROUP_ID) || WOM_GROUP_ID !== 5622) {
+        return NextResponse.json({ error: `WOM_GROUP_ID is invalid or not set correctly. Received: '${womGroupIdString}'` }, { status: 500 });
     }
 
     const supabaseAdmin = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
-
     const womUrl = `https://api.wiseoldman.net/v2/groups/${WOM_GROUP_ID}`;
 
     try {
@@ -103,18 +121,10 @@ export async function POST(request: Request) {
             supabaseAdmin.from('submissions').select('player_name, bounty_tier').eq('status', 'approved').eq('submission_type', 'bounty'),
         ]);
 
-        if (!groupRes.ok) {
-            throw new Error(`Failed to fetch WOM group details from URL: '${womUrl}'. Received status ${groupRes.status} ${groupRes.statusText}`);
-        }
-
-        const groupData = await groupRes.json().catch(() => {
-            throw new Error("Wise Old Man API returned a non-JSON response. It may be down or rate-limiting.");
-        });
-
+        if (!groupRes.ok) throw new Error(`Failed to fetch WOM group details. Status: ${groupRes.status}`);
+        const groupData = await groupRes.json();
         const womMemberships = groupData.memberships;
-        if (!Array.isArray(womMemberships)) {
-            throw new Error("Invalid WOM group data format: 'memberships' array not found in the response.");
-        }
+        if (!Array.isArray(womMemberships)) throw new Error("Invalid WOM data: 'memberships' array not found.");
 
         const { data: approvedSubmissions, error: submissionsError } = submissionsRes;
         if (submissionsError) throw new Error(`Failed to fetch submissions: ${submissionsError.message}`);
@@ -138,6 +148,30 @@ export async function POST(request: Request) {
             const player = membership.player;
             if (!player) return;
 
+            const role = membership.role || 'member';
+
+            // Check if the member has a special role
+            if (SPECIAL_ROLES.has(role)) {
+                clanMembersRanked.push({
+                    username: player.username,
+                    displayName: player.displayName,
+                    ehb: 0,
+                    ehp: 0,
+                    accountType: player.type || 'unknown',
+                    ttm: 0,
+                    bounties: { low: 0, medium: 0, high: 0, total: 0 },
+                    currentRank: ROLE_DISPLAY_NAMES[role] || role,
+                    // --- START MODIFIED LOGIC ---
+                    // Assign the negative sort order from our new constant
+                    rankOrder: ROLE_SORT_ORDER[role],
+                    // --- END MODIFIED LOGIC ---
+                    requirementsMet: [],
+                    nextRankRequirements: ["N/A for this role"],
+                });
+                return;
+            }
+
+            // Process regular participating members
             const username = player.username;
             const displayName = player.displayName;
             const ehb = Math.round(player.ehb || 0);
@@ -166,6 +200,8 @@ export async function POST(request: Request) {
           totalMembers: totalClanMembers,
           topEHB: ehbLeaderboard.slice(0, 3),
           topEHP: ehpLeaderboard.slice(0, 3),
+          // The sort function remains the same, but now it will correctly place
+          // members with negative rankOrder at the bottom.
           rankedPlayers: clanMembersRanked.sort((a, b) => b.rankOrder - a.rankOrder || a.displayName.localeCompare(b.displayName)),
           lastUpdated: new Date().toISOString()
         };
