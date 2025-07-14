@@ -1,4 +1,4 @@
-// app/admin/page.tsx - FINAL with display bug and syntax error fixed
+// app/admin/page.tsx - FINAL version with all display and auth bugs fixed
 
 'use client';
 
@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 
 // Interfaces
 interface Bounty { id: number; name: string; tier: string; image_url: string; is_active: boolean; created_at: string; }
-// Corrected Submission interface to handle the joined data
+// Corrected Submission interface to handle the joined bounty data
 interface Submission { id: number; created_at: string; player_name: string; submission_type: string; personal_best_category: string | null; proof_image_url: string; is_archived: boolean; status: string; bounty_tier: 'low' | 'medium' | 'high' | null; personal_best_time: string | null; trade_proof_url: string | null; bounty_id: number | null; bounties: { name: string; } | null; }
 
 export default function AdminPage() {
@@ -40,18 +40,24 @@ export default function AdminPage() {
         const { data, error } = await supabase.from('bounties').select('*').order('created_at', { ascending: false });
         if (error) console.error('Error fetching bounties:', error); else setBounties(data || []);
     }, []);
+
+    // --- FIX #1: Correctly fetch related bounty name for pending submissions ---
     const fetchPendingSubmissions = useCallback(async () => {
         const { data, error } = await supabase.from('submissions').select('*, bounties(name)').eq('status', 'pending').order('created_at', { ascending: true });
         if (error) console.error('Error fetching pending submissions:', error); else setPendingSubmissions(data || []);
     }, []);
+
     const fetchPersonalBests = useCallback(async () => {
         const { data, error } = await supabase.from('submissions').select('*').eq('status', 'approved').eq('submission_type', 'personal_best').order('created_at', { ascending: false });
         if (error) console.error('Error fetching PBs:', error); else setPersonalBests((data as Submission[]) || []);
     }, []);
+
     const fetchSettings = useCallback(async () => {
         const { data, error } = await supabase.from('settings').select('*').eq('id', 1).single();
         if (error) console.error("Error fetching settings:", error); else if (data) { setIsPasswordRequired(data.is_password_required); setSubmissionPassword(data.submission_password || ''); }
     }, []);
+
+    // --- FIX #2: Correctly fetch related bounty name for the trade log ---
     const fetchApprovedBounties = useCallback(async () => {
         const { data, error } = await supabase.from('submissions').select('*, bounties(name)').eq('status', 'approved').eq('submission_type', 'bounty').order('created_at', { ascending: false });
         if (error) console.error("Error fetching approved bounties:", error); else setApprovedBounties(data || []);
@@ -81,16 +87,6 @@ export default function AdminPage() {
         if (newStatus === 'approved' && submissionToUpdate.submission_type === 'personal_best') await fetchPersonalBests();
     }, [fetchBounties, fetchPendingSubmissions, fetchPersonalBests, fetchApprovedBounties]);
 
-    const handleBountyFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-        setNewBountyFile(null);
-        if (e.target.files && e.target.files.length > 0) {
-            const file = e.target.files[0];
-            const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
-            if (!allowedTypes.includes(file.type)) { alert("Invalid file type."); e.target.value = ''; return; }
-            setNewBountyFile(file);
-        }
-    }, []);
-
     const handleBountySubmit = useCallback(async (e: FormEvent) => {
         e.preventDefault();
         if (!newBountyFile || !newBountyName) { alert("Please provide a bounty name and select an image."); return; }
@@ -103,8 +99,7 @@ export default function AdminPage() {
             const { error: iError } = await supabase.from('bounties').insert([{ name: newBountyName, tier: newBountyTier, image_url: urlData.publicUrl, is_active: true }]);
             if (iError) throw iError;
             setNewBountyName(''); setNewBountyTier('low'); setNewBountyFile(null);
-            (e.target as HTMLFormElement).reset();
-            await fetchBounties();
+            (e.target as HTMLFormElement).reset(); await fetchBounties();
         } catch (error: any) { alert(`Error submitting bounty: ${error.message}`); }
         finally { setIsSubmittingBounty(false); }
     }, [newBountyFile, newBountyName, newBountyTier, fetchBounties]);
@@ -115,10 +110,9 @@ export default function AdminPage() {
     }, [fetchBounties]);
 
     const handleBountyDelete = useCallback(async (id: number) => {
-        if (window.confirm("Are you sure you want to permanently delete this bounty? This action cannot be undone.")) {
+        if (window.confirm("Are you sure? This cannot be undone.")) {
             const { error } = await supabase.from('bounties').delete().eq('id', id);
-            if (error) { alert(`Error deleting bounty: ${error.message}`); }
-            else { await fetchBounties(); }
+            if (error) { alert(`Error deleting bounty: ${error.message}`); } else { await fetchBounties(); }
         }
     }, [fetchBounties]);
 
@@ -147,13 +141,11 @@ export default function AdminPage() {
 
     const handleTradeProofRemove = useCallback(async (submission: Submission) => {
         if (!submission.trade_proof_url) return;
-        if (!window.confirm("Are you sure you want to remove this trade proof?")) return;
+        if (!window.confirm("Are you sure?")) return;
         setIsLoggingTrade(true); setSelectedSubmissionId(submission.id);
         try {
             const fileName = submission.trade_proof_url.split('/').pop();
-            if (fileName) {
-                await supabase.storage.from('trade-proofs').remove([fileName]);
-            }
+            if (fileName) await supabase.storage.from('trade-proofs').remove([fileName]);
             await supabase.from('submissions').update({ trade_proof_url: null }).eq('id', submission.id);
             alert("Trade proof removed successfully.");
             await fetchApprovedBounties();
@@ -168,21 +160,28 @@ export default function AdminPage() {
     }, [isPasswordRequired, submissionPassword]);
 
     const handleLogout = useCallback(async () => { await supabase.auth.signOut(); setUser(null); router.push('/'); }, [router]);
+
+    // --- FIX #3: Robust session handling for the refresh button ---
     const handleRefreshData = useCallback(async () => {
         setIsRefreshing(true); setRefreshStatus('Refreshing, please wait...');
         try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) throw new Error("Authentication error.");
+            const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
+            if (sessionError || !session) throw new Error("Your session has expired. Please log in again.");
             const response = await fetch('/api/refresh-clan-data', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
             const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Unknown error.');
+            if (!response.ok) throw new Error(result.error || 'An unknown error occurred.');
             setRefreshStatus(result.message);
-        } catch (error: any) { setRefreshStatus(`Error: ${error.message}`); }
-        finally { setIsRefreshing(false); setTimeout(() => setRefreshStatus(''), 5000); }
-    }, []);
+        } catch (error: any) {
+            setRefreshStatus(`Error: ${error.message}`);
+            if (error.message.includes("session has expired")) await handleLogout();
+        } finally {
+            setIsRefreshing(false);
+            setTimeout(() => setRefreshStatus(''), 5000);
+        }
+    }, [handleLogout]);
 
     if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Loading...</div>;
     if (!user) return <AdminLogin onLogin={checkUserAndLoadData} />;
