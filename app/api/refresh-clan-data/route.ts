@@ -1,4 +1,4 @@
-// app/api/refresh-clan-data/route.ts - FINAL with correct auth pattern
+// app/api/refresh-clan-data/route.ts - FINAL with robust environment variable parsing
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -72,41 +72,48 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Unauthorized: Missing Authorization Header.' }, { status: 401 });
     }
     const token = authHeader.split(' ')[1];
-
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-            global: {
-                headers: { Authorization: `Bearer ${token}` }
-            }
-        }
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
-
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser(token);
     if (!user) {
         return NextResponse.json({ error: 'Unauthorized: Invalid token.' }, { status: 401 });
     }
 
-    const WOM_GROUP_ID = process.env.WOM_GROUP_ID;
-    if (!WOM_GROUP_ID) {
-        return NextResponse.json({ error: "WOM_GROUP_ID not configured." }, { status: 500 });
+    const womGroupIdString = process.env.WOM_GROUP_ID;
+    if (!womGroupIdString) {
+        return NextResponse.json({ error: "WOM_GROUP_ID environment variable is not set on the server." }, { status: 500 });
     }
+    const WOM_GROUP_ID = parseInt(womGroupIdString.trim(), 10);
+    if (isNaN(WOM_GROUP_ID)) {
+        return NextResponse.json({ error: `WOM_GROUP_ID is not a valid number. Received: '${womGroupIdString}'` }, { status: 500 });
+    }
+
+    const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const womUrl = `https://api.wiseoldman.net/v2/groups/${WOM_GROUP_ID}`;
 
     try {
         const [groupRes, submissionsRes] = await Promise.all([
-            fetch(`https://api.wiseoldman.net/v2/groups/${WOM_GROUP_ID}`),
-            supabase.from('submissions').select('player_name, bounty_tier').eq('status', 'approved').eq('submission_type', 'bounty'),
+            fetch(womUrl),
+            supabaseAdmin.from('submissions').select('player_name, bounty_tier').eq('status', 'approved').eq('submission_type', 'bounty'),
         ]);
 
         if (!groupRes.ok) {
-            const errorText = await groupRes.text();
-            throw new Error(`Failed to fetch WOM group details: ${groupRes.statusText} - ${errorText}`);
+            throw new Error(`Failed to fetch WOM group details from URL: '${womUrl}'. Received status ${groupRes.status} ${groupRes.statusText}`);
         }
-        const groupData = await groupRes.json();
+
+        const groupData = await groupRes.json().catch(() => {
+            throw new Error("Wise Old Man API returned a non-JSON response. It may be down or rate-limiting.");
+        });
+
         const womMemberships = groupData.memberships;
         if (!Array.isArray(womMemberships)) {
-            throw new Error("Invalid WOM group data format: 'memberships' array not found.");
+            throw new Error("Invalid WOM group data format: 'memberships' array not found in the response.");
         }
 
         const { data: approvedSubmissions, error: submissionsError } = submissionsRes;
@@ -163,14 +170,8 @@ export async function POST(request: Request) {
           lastUpdated: new Date().toISOString()
         };
 
-        const { error: updateError } = await supabase
-            .from('clan_data')
-            .update({ data: computedData })
-            .eq('id', 1);
-
-        if (updateError) {
-            throw new Error(`Failed to save computed data to Supabase: ${updateError.message}`);
-        }
+        const { error: updateError } = await supabaseAdmin.from('clan_data').update({ data: computedData }).eq('id', 1);
+        if (updateError) throw new Error(`Failed to save computed data to Supabase: ${updateError.message}`);
 
         revalidatePath('/api/get-cached-clan-data');
         revalidatePath('/ranks');
