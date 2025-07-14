@@ -1,4 +1,4 @@
-// app/leaderboards/page.tsx - FINAL with active member filtering
+// app/leaderboards/page.tsx
 
 'use client';
 
@@ -6,7 +6,6 @@ import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
 import { supabase } from '@/lib/supabaseClient';
 
-// --- PRESET LIST OF PB CATEGORIES ---
 const pbCategories = [
   'All Personal Bests',
   'Challenge Mode Chambers of Xeric',
@@ -20,7 +19,6 @@ const pbCategories = [
   'Tombs of Amascut',
 ];
 
-// --- INTERFACES ---
 interface Submission {
   id: number;
   player_name: string;
@@ -42,7 +40,6 @@ interface BountyHunterStat {
   totalGP: number;
 }
 
-// --- NEW INTERFACE for the clan data we'll fetch ---
 interface ClanData {
   rankedPlayers: { username: string; }[];
 }
@@ -54,13 +51,11 @@ export default function LeaderboardsPage() {
   const [loading, setLoading] = useState(true);
   const [selectedPbCategory, setSelectedPbCategory] = useState(pbCategories[0]);
 
-  // --- MODIFIED useEffect to fetch both submissions and active roster ---
   useEffect(() => {
     const fetchLeaderboardData = async () => {
       setLoading(true);
 
       try {
-        // Use Promise.all to fetch both data sources concurrently
         const [submissionsResponse, clanDataResponse] = await Promise.all([
           supabase.from('submissions').select('*').eq('status', 'approved').eq('is_archived', false),
           fetch('/api/get-cached-clan-data')
@@ -72,11 +67,9 @@ export default function LeaderboardsPage() {
         if (!clanDataResponse.ok) throw new Error('Failed to fetch clan roster');
         const clanData: ClanData = await clanDataResponse.json();
 
-        // --- NEW: Create a Set of active members for efficient filtering ---
         const activeClanMembers = new Set(clanData.rankedPlayers.map(p => p.username.toLowerCase()));
 
         if (submissionsData) {
-          // --- Process Bounty Hunters with filtering ---
           const playerStats: { [key: string]: BountyHunterStat } = {};
 
           submissionsData
@@ -98,7 +91,6 @@ export default function LeaderboardsPage() {
 
           setBountyHunters(Object.values(playerStats).sort((a, b) => b.totalGP - a.totalGP));
 
-          // --- Process Personal Bests with filtering ---
           const activePersonalBests = submissionsData.filter(sub =>
             sub.submission_type === 'personal_best' && activeClanMembers.has(sub.player_name.toLowerCase())
           );
@@ -115,7 +107,6 @@ export default function LeaderboardsPage() {
     fetchLeaderboardData();
   }, []);
 
-  // --- HELPER FUNCTION TO CONVERT TIME STRING TO SECONDS FOR SORTING (Unchanged) ---
   const timeToSeconds = (time: string | null): number => {
     if (!time) return Infinity;
     const parts = time.split(':');
@@ -129,12 +120,10 @@ export default function LeaderboardsPage() {
     return seconds || Infinity;
   };
 
-  // --- FILTER AND SORT THE PBs TO BE DISPLAYED (Unchanged) ---
   const filteredAndSortedPBs = personalBests
     .filter(pb => selectedPbCategory === 'All Personal Bests' || pb.personal_best_category === selectedPbCategory)
     .sort((a, b) => timeToSeconds(a.personal_best_time) - timeToSeconds(b.personal_best_time));
 
-  // --- JSX RENDER (Unchanged) ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       <Header />
