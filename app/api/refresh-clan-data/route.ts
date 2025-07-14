@@ -1,4 +1,4 @@
-// app/api/refresh-clan-data/route.ts - With resilient JSON parsing
+// app/api/refresh-clan-data/route.ts - With User-Agent header
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -7,19 +7,19 @@ import { revalidatePath } from 'next/cache';
 // --- Interfaces ---
 interface PlayerBountyCounts { low: number; medium: number; high: number; total: number; }
 interface ClanMemberWithWOMStats { username: string; ehb: number; ehp: number; combatLevel: number; totalLevel: number; }
-interface ClanMemberRanked { username: string; displayName: string; ehb: number; ehp: number; accountType: string; ttm: number; bounties: PlayerBountyCounts; currentRank: string; rankOrder: number; requirementsMet: string[]; nextRankRequirements: string[]; }
+interface ClanMemberRanked { username: string; displayName: string; ehb: number; ehp: number; accountType: string; ttm: number; bounties: PlayerBountyCounts; currentRank: string; rankOrder: number; nextRankRequirements: string[]; }
 
 // --- Rank Definitions ---
 const RANK_DEFINITIONS = [
-    { name: "Infernal", order: 10, criteria: [ { type: "total_bounties", min: 12, display: "12+ Total Bounties" }, { type: "high_bounties", min: 3, display: "3+ High Bounties" }, { type: "ehb", min: 1000, display: "1000+ EHB" }, ]},
-    { name: "Zenyte", order: 9, criteria: [ { type: "total_bounties", min: 9, display: "9+ Total Bounties" }, { type: "high_bounties", min: 3, display: "3+ High Bounties" }, { type: "ehb", min: 1000, display: "1000+ EHB" }, ]},
-    { name: "Onyx", order: 8, criteria: [ { type: "total_bounties", min: 7, display: "7+ Total Bounties" }, { type: "high_bounties", min: 2, display: "2+ High Bounties" }, { type: "ehb", min: 750, display: "750+ EHB" }, ]},
-    { name: "Dragonstone", order: 7, criteria: [ { type: "total_bounties", min: 5, display: "5+ Total Bounties" }, { type: "high_bounties", min: 1, display: "1+ High Bounty" }, { type: "ehb", min: 500, display: "500+ EHB" }, ]},
-    { name: "Diamond", order: 6, criteria: [ { type: "total_bounties", min: 4, display: "4+ Total Bounties" }, { type: "medium_bounties", min: 2, display: "2+ Medium Bounties" }, { type: "ehb", min: 250, display: "250+ EHB" }, ]},
-    { name: "Ruby", order: 5, criteria: [ { type: "total_bounties", min: 3, display: "3+ Total Bounties" }, { type: "medium_bounties", min: 1, display: "1+ Medium Bounty" }, { type: "ehb", min: 100, display: "100+ EHB" }, ]},
-    { name: "Emerald", order: 4, criteria: [ { type: "total_bounties", min: 2, display: "2+ Total Bounties" }, { type: "ehb", min: 50, display: "50+ EHB" }, ]},
-    { name: "Sapphire", order: 3, criteria: [ { type: "total_bounties", min: 1, display: "1+ Total Bounty" }, { type: "ehb", min: 25, display: "25+ EHB" }, ]},
-    { name: "Opal", order: 2, criteria: [ { type: "ehb", min: 10, display: "10+ EHB" }, ]},
+    { name: "Infernal", order: 10, criteria: [ { type: "total_bounties", min: 12 }, { type: "high_bounties", min: 3 }, { type: "ehb", min: 1000 } ] },
+    { name: "Zenyte", order: 9, criteria: [ { type: "total_bounties", min: 9 }, { type: "high_bounties", min: 3 }, { type: "ehb", min: 1000 } ] },
+    { name: "Onyx", order: 8, criteria: [ { type: "total_bounties", min: 7 }, { type: "high_bounties", min: 2 }, { type: "ehb", min: 750 } ] },
+    { name: "Dragonstone", order: 7, criteria: [ { type: "total_bounties", min: 5 }, { type: "high_bounties", min: 1 }, { type: "ehb", min: 500 } ] },
+    { name: "Diamond", order: 6, criteria: [ { type: "total_bounties", min: 4 }, { type: "medium_bounties", min: 2 }, { type: "ehb", min: 250 } ] },
+    { name: "Ruby", order: 5, criteria: [ { type: "total_bounties", min: 3 }, { type: "medium_bounties", min: 1 }, { type: "ehb", min: 100 } ] },
+    { name: "Emerald", order: 4, criteria: [ { type: "total_bounties", min: 2 }, { type: "ehb", min: 50 } ] },
+    { name: "Sapphire", order: 3, criteria: [ { type: "total_bounties", min: 1 }, { type: "ehb", min: 25 } ] },
+    { name: "Opal", order: 2, criteria: [ { type: "ehb", min: 10 } ] },
     { name: "Backpack", order: 1, criteria: [] },
 ];
 
@@ -93,20 +93,24 @@ export async function POST(request: Request) {
 
     try {
         const [groupRes, submissionsRes] = await Promise.all([
-            fetch(`https://api.wiseoldman.net/v2/groups/${WOM_GROUP_ID}`),
+            fetch(`https://api.wiseoldman.net/v2/groups/${WOM_GROUP_ID}`, {
+                method: 'GET',
+                headers: {
+                    // Identify our application to the WOM API to prevent blocking
+                    'User-Agent': `SeekClanWebsite/1.0 (${user.email || 'contact@seek-clan.com'})`
+                }
+            }),
             supabaseAdmin.from('submissions').select('player_name, bounty_tier').eq('status', 'approved').eq('submission_type', 'bounty'),
         ]);
 
-        // --- Resilient JSON Parsing ---
         if (!groupRes.ok) {
-            throw new Error(`Failed to fetch WOM group details: Received status ${groupRes.status} ${groupRes.statusText}`);
+            const errorText = await groupRes.text();
+            throw new Error(`Failed to fetch WOM group details: Received status ${groupRes.status} ${groupRes.statusText}. Response: ${errorText}`);
         }
-        const groupResClone = groupRes.clone();
+
         const groupData = await groupRes.json().catch(() => {
-            console.error("Failed to parse WOM response as JSON. Raw text:", groupResClone.text());
             throw new Error("Wise Old Man API returned a non-JSON response. It may be down or rate-limiting.");
         });
-        // --- End of Resilient Parsing ---
 
         const womMemberships = groupData.memberships;
         if (!Array.isArray(womMemberships)) {
