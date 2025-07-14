@@ -1,4 +1,4 @@
-// app/api/refresh-clan-data/route.ts - Fixed missing property in interface
+// app/api/refresh-clan-data/route.ts - FINAL with correct auth pattern
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -7,21 +7,7 @@ import { revalidatePath } from 'next/cache';
 // --- Interfaces ---
 interface PlayerBountyCounts { low: number; medium: number; high: number; total: number; }
 interface ClanMemberWithWOMStats { username: string; ehb: number; ehp: number; combatLevel: number; totalLevel: number; }
-
-// --- THIS IS THE CORRECTED INTERFACE ---
-interface ClanMemberRanked {
-  username: string;
-  displayName: string;
-  ehb: number;
-  ehp: number;
-  accountType: string;
-  ttm: number;
-  bounties: PlayerBountyCounts;
-  currentRank: string;
-  rankOrder: number;
-  requirementsMet: string[]; // This line was missing and has been restored
-  nextRankRequirements: string[];
-}
+interface ClanMemberRanked { username: string; displayName: string; ehb: number; ehp: number; accountType: string; ttm: number; bounties: PlayerBountyCounts; currentRank: string; rankOrder: number; requirementsMet: string[]; nextRankRequirements: string[]; }
 
 // --- Rank Definitions ---
 const RANK_DEFINITIONS = [
@@ -86,11 +72,18 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Unauthorized: Missing Authorization Header.' }, { status: 401 });
     }
     const token = authHeader.split(' ')[1];
+
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+            global: {
+                headers: { Authorization: `Bearer ${token}` }
+            }
+        }
     );
-    const { data: { user } } = await supabase.auth.getUser(token);
+
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
         return NextResponse.json({ error: 'Unauthorized: Invalid token.' }, { status: 401 });
     }
@@ -100,15 +93,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "WOM_GROUP_ID not configured." }, { status: 500 });
     }
 
-    const supabaseAdmin = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
     try {
         const [groupRes, submissionsRes] = await Promise.all([
             fetch(`https://api.wiseoldman.net/v2/groups/${WOM_GROUP_ID}`),
-            supabaseAdmin.from('submissions').select('player_name, bounty_tier').eq('status', 'approved').eq('submission_type', 'bounty'),
+            supabase.from('submissions').select('player_name, bounty_tier').eq('status', 'approved').eq('submission_type', 'bounty'),
         ]);
 
         if (!groupRes.ok) {
@@ -159,7 +147,7 @@ export async function POST(request: Request) {
             clanMembersRanked.push({
                 username, displayName, ehb, ehp, accountType, ttm, bounties,
                 currentRank: rank, rankOrder: order,
-                requirementsMet: [], // Restored
+                requirementsMet: [],
                 nextRankRequirements: next,
             });
         });
@@ -175,8 +163,14 @@ export async function POST(request: Request) {
           lastUpdated: new Date().toISOString()
         };
 
-        const { error: updateError } = await supabaseAdmin.from('clan_data').update({ data: computedData }).eq('id', 1);
-        if (updateError) throw new Error(`Failed to save computed data: ${updateError.message}`);
+        const { error: updateError } = await supabase
+            .from('clan_data')
+            .update({ data: computedData })
+            .eq('id', 1);
+
+        if (updateError) {
+            throw new Error(`Failed to save computed data to Supabase: ${updateError.message}`);
+        }
 
         revalidatePath('/api/get-cached-clan-data');
         revalidatePath('/ranks');
