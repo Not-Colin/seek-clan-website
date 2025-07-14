@@ -1,4 +1,4 @@
-// app/submit/page.tsx - FINAL with bug fixes
+// app/submit/page.tsx - with debugging console.log
 
 'use client';
 
@@ -7,8 +7,16 @@ import Header from '@/components/Header';
 import { supabase } from '@/lib/supabaseClient';
 import { useSearchParams } from 'next/navigation';
 
-interface Bounty { id: number; name: string; tier: 'low' | 'medium' | 'high'; }
-interface ClanMember { displayName: string; id: number; }
+interface Bounty {
+  id: number;
+  name: string;
+  tier: 'low' | 'medium' | 'high';
+}
+
+interface ClanMember {
+  displayName: string;
+  id: number;
+}
 
 const pbCategories = [
   'Challenge Mode Chambers of Xeric', 'Chambers of Xeric', 'Fight Caves', 'Fortis Colosseum',
@@ -65,14 +73,12 @@ function SubmitFormContent() {
       // Process Clan Roster
       if (clanDataRes.ok) {
         const clanData = await clanDataRes.json();
-        // Correctly map and filter for members that have an ID
         const members = clanData.rankedPlayers
           .map((p: any) => ({ displayName: p.displayName, id: p.id }))
-          .filter((p: ClanMember) => p.id) // Ensure member has an ID
+          .filter((p: ClanMember) => p.id)
           .sort((a: ClanMember, b: ClanMember) => a.displayName.localeCompare(b.displayName));
 
         setClanMembers(members);
-        // Safely set the default selected player
         if (members.length > 0) {
           setSelectedPlayerId(members[0].id.toString());
         }
@@ -80,7 +86,6 @@ function SubmitFormContent() {
         console.error('Error fetching clan roster');
       }
     };
-
     initializePage();
   }, [searchParams]);
 
@@ -118,8 +123,8 @@ function SubmitFormContent() {
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from('proof-images').getPublicUrl(fileName);
 
-      const { error: rpcError } = await supabase.rpc('submit_achievement', {
-        payload: {
+      // --- START DEBUGGING BLOCK ---
+      const rpcPayload = {
           player_name_in: playerName,
           wom_player_id_in: womPlayerId,
           submission_type_in: submissionType,
@@ -129,7 +134,14 @@ function SubmitFormContent() {
           pb_category_in: submissionType === 'personal_best' ? pbCategory : null,
           pb_time_in: submissionType === 'personal_best' ? pbTime : null,
           password_in: userEnteredPassword
-        }
+      };
+
+      console.log("--- Sending this payload to Supabase RPC ---");
+      console.log(JSON.stringify(rpcPayload, null, 2));
+      // --- END DEBUGGING BLOCK ---
+
+      const { error: rpcError } = await supabase.rpc('submit_achievement', {
+        payload: rpcPayload
       });
 
       if (rpcError) throw rpcError;
