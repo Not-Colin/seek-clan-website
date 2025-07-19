@@ -149,6 +149,7 @@ export default function PlayerDetailPage() {
                   <StatCard label="Total EHB" value={Math.round(player.ehb)} />
                   {ehbRank && <StatCard label="Clan EHB Rank" value={ehbRank} />}
               </div>
+              {snapshotData?.bosses && <RaidTiers bosses={snapshotData.bosses} />}
               {snapshotData?.skills && <TopSkillsPanel skills={snapshotData.skills} />}
               {snapshotData?.activities && <ClueScrollTracker activities={snapshotData.activities} />}
               {!loading && <PersonalBestsSection submissions={personalBests} />}

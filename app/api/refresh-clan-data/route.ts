@@ -3,7 +3,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
-import { WOMClient } from '@wise-old-man/utils';
+
+// NOTE: We no longer need the @wise-old-man/utils client for this file.
 
 interface PlayerBountyCounts { low: number; medium: number; high: number; total: number; }
 interface ClanMemberRanked { id: number; username: string; displayName: string; ehb: number; ehp: number; accountType: string; ttm: number; bounties: PlayerBountyCounts; currentRank: string; rankOrder: number; requirementsMet: string[]; nextRankRequirements: string[]; }
@@ -72,11 +73,10 @@ export async function POST(request: Request) {
 
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
     const womUrl = `https://api.wiseoldman.net/v2/groups/${WOM_GROUP_ID}`;
-    const womClient = new WOMClient();
 
     try {
         const [groupRes, submissionsRes] = await Promise.all([
-            fetch(womUrl),
+            fetch(womUrl), // This is now our ONLY call to the WOM API
             supabaseAdmin.from('submissions').select('wom_player_id, bounty_tier').eq('status', 'approved').eq('submission_type', 'bounty'),
         ]);
 
@@ -88,19 +88,15 @@ export async function POST(request: Request) {
         const { data: approvedSubmissions, error: submissionsError } = submissionsRes;
         if (submissionsError) throw submissionsError;
 
-        const playerDetailPromises = womMemberships.map((membership: any) => {
-            if (membership.player?.id) {
-                return womClient.players.getPlayerDetailsById(membership.player.id);
-            }
-            return Promise.resolve(null);
-        });
-        const playerDetailsResults = await Promise.all(playerDetailPromises);
-        const validPlayerDetails = playerDetailsResults.filter(details => details !== null);
-        const upsertData = validPlayerDetails.map(details => ({
-            wom_player_id: details!.id,
-            wom_details_json: details,
-            last_updated: new Date().toISOString(),
-        }));
+        // --- OPTIMIZED: Use the detailed player data that's already in the response ---
+        const upsertData = womMemberships
+            .filter((m: any) => m.player) // Filter out any invalid members
+            .map((m: any) => ({
+                wom_player_id: m.player.id,
+                wom_details_json: m.player, // The full player object is already here!
+                last_updated: new Date().toISOString(),
+            }));
+
         if (upsertData.length > 0) {
             const { error: upsertError } = await supabaseAdmin.from('player_details').upsert(upsertData, { onConflict: 'wom_player_id' });
             if (upsertError) console.error("Error upserting player details:", upsertError);
@@ -138,26 +134,14 @@ export async function POST(request: Request) {
             ehpLeaderboard.push({ username, displayName, ehp });
 
             if (SPECIAL_ROLES.has(role)) {
-                clanMembersRanked.push({
-                    id: playerId, username, displayName, ehb, ehp, accountType, ttm,
-                    bounties: { low: 0, medium: 0, high: 0, total: 0 },
-                    currentRank: ROLE_DISPLAY_NAMES[role] || role,
-                    rankOrder: ROLE_SORT_ORDER[role] || -99,
-                    requirementsMet: [],
-                    nextRankRequirements: ["N/A for this role"],
-                });
+                clanMembersRanked.push({ id: playerId, username, displayName, ehb, ehp, accountType, ttm, bounties: { low: 0, medium: 0, high: 0, total: 0 }, currentRank: ROLE_DISPLAY_NAMES[role] || role, rankOrder: ROLE_SORT_ORDER[role] || -99, requirementsMet: [], nextRankRequirements: ["N/A for this role"], });
                 return;
             }
 
             const bounties = playerBountyCounts[playerId] || { low: 0, medium: 0, high: 0, total: 0 };
             const { rank, order, next } = getPlayerRank({ ehb }, bounties);
 
-            clanMembersRanked.push({
-                id: playerId, username, displayName, ehb, ehp, accountType, ttm, bounties,
-                currentRank: rank, rankOrder: order,
-                requirementsMet: [],
-                nextRankRequirements: next,
-            });
+            clanMembersRanked.push({ id: playerId, username, displayName, ehb, ehp, accountType, ttm, bounties, currentRank: rank, rankOrder: order, requirementsMet: [], nextRankRequirements: next, });
         });
 
         ehbLeaderboard.sort((a, b) => b.ehb - a.ehb);
@@ -178,7 +162,7 @@ export async function POST(request: Request) {
         revalidatePath('/ranks');
         revalidatePath('/');
 
-        return NextResponse.json({ message: `Clan data and ${validPlayerDetails.length} player details refreshed successfully.` });
+        return NextResponse.json({ message: `Clan data refreshed successfully. (1 WOM API Call)` });
 
     } catch (error: any) {
         console.error('Refresh API Error:', error);
