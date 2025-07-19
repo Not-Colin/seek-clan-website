@@ -30,10 +30,6 @@ const PlaystyleDonut = ({ ehp, ehb }: { ehp: number, ehb: number }) => {
     const conicGradient = { backgroundImage: `conic-gradient(#3b82f6 ${ehpPercent}%, #ef4444 ${ehpPercent}%)` };
     return (<div className="bg-slate-800/50 rounded-lg p-6 h-full flex flex-col justify-center"><h3 className="text-xl font-semibold text-orange-400 mb-4 text-center">Playstyle Breakdown</h3><div className="relative flex items-center justify-center w-56 h-56 mx-auto"><div style={conicGradient} className="rounded-full w-full h-full shadow-inner"></div><div className="absolute bg-slate-800 w-40 h-40 rounded-full flex flex-col items-center justify-center text-center"><p className={`text-lg font-bold ${dominantColorClass}`}>{dominantStyle}</p><p className="text-3xl font-bold text-white">{dominantPercent.toFixed(1)}%</p></div></div><div className="flex justify-between text-sm mt-4 px-4"><p className="text-blue-400"><span className="font-bold">{ehp.toLocaleString()}</span> EHP</p><p className="text-red-400"><span className="font-bold">{ehb.toLocaleString()}</span> EHB</p></div></div>);
 };
-const BossTierCard = ({ name, kc }: { name: string, kc: number }) => {
-    const { tier, label, color } = getKCTier(kc);
-    return (<div className="bg-slate-700/50 p-4 rounded-lg flex justify-between items-center"><div><p className="font-bold text-white">{formatName(name)}</p><p className="text-sm text-gray-400">{kc.toLocaleString()} Kills</p></div><div className="text-right"><p className={`font-bold ${color}`}>{label}</p><p className="text-xs text-gray-500">Mastery Tier {tier}</p></div></div>);
-};
 const TopSkillsPanel = ({ skills }: { skills: any }) => {
     const topSkills = Object.entries(skills).filter(([name]) => name !== 'overall').sort(([, a]: [string, any], [, b]: [string, any]) => (b.experience ?? 0) - (a.experience ?? 0)).slice(0, 3);
     return (<div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700"><h3 className="text-xl font-semibold text-orange-400 mb-4 border-b-2 border-orange-500/30 pb-2">Top 3 Skills</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-4">{topSkills.map(([name, data]: [string, any]) => (<div key={name} className="bg-slate-700/50 p-4 rounded-lg text-center"><Image src={`/ranks/skills/${name}.png`} alt={name} width={32} height={32} className="mx-auto mb-2" /><p className="font-bold text-white capitalize">{formatName(name)}</p><p className="text-2xl text-yellow-400">{data.level}</p><p className="text-xs text-gray-500">{(data.experience ?? 0).toLocaleString()} XP</p></div>))}</div></div>);
@@ -107,6 +103,7 @@ export default function PlayerPageClient({ playerId }: { playerId: string }) {
             {snapshotData?.bosses && <RaidTiers bosses={snapshotData.bosses} />}
             {snapshotData?.skills && <TopSkillsPanel skills={snapshotData.skills} />}
             {snapshotData?.activities && <ClueScrollTracker activities={snapshotData.activities} />}
+            {/* The "Top 3 Boss Mastery" section has been permanently removed */}
           </div>
         )}
       </div>
