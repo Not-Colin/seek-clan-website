@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import { WOMPlayer, Pet } from '@wise-old-man/utils';
+import { PlayerDetails } from '@wise-old-man/utils';
 
 // --- Helper Functions & Components (Copied from the old file) ---
 const getKCTier = (kc: number): { tier: number; label: string; color: string } => {
@@ -54,7 +54,7 @@ const CombatAchievements = ({ tier, tasksCompleted }: { tier: string, tasksCompl
 
 // This component now accepts a simple `playerId` string as a prop.
 export default function PlayerPageClient({ playerId }: { playerId: string }) {
-  const [player, setPlayer] = useState<WOMPlayer | null>(null);
+  const [player, setPlayer] = useState<PlayerDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const searchParams = useSearchParams();
@@ -67,7 +67,7 @@ export default function PlayerPageClient({ playerId }: { playerId: string }) {
       try {
         const response = await fetch(`/api/get-player-details/${playerId}`);
         if (!response.ok) throw new Error('Player data not found. It may need to be refreshed by an admin.');
-        const data: WOMPlayer = await response.json();
+        const data: PlayerDetails = await response.json();
         setPlayer(data);
       } catch (err: any) { setError(err.message); }
       finally { setLoading(false); }
