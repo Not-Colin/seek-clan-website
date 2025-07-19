@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
-import { Player } from '@wise-old-man/utils';
+import { PlayerDetail } from '@wise-old-man/utils';
 import { useParams, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 
@@ -81,7 +81,7 @@ export default function PlayerDetailPage() {
   const ehbRank = searchParams.get('ehbRank');
   const clanRank = searchParams.get('clanRank');
 
-  const [player, setPlayer] = useState<Player | null>(null);
+  const [player, setPlayer] = useState<PlayerDetail | null>(null);
   const [personalBests, setPersonalBests] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
