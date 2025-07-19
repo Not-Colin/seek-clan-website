@@ -32,7 +32,7 @@ const getCATierStyle = (tier: string): { label: string; color: string } => {
 const StatCard = ({ label, value, unit = '' }: { label: string, value: number | string | undefined, unit?: string }) => (
   <div className="bg-slate-700/50 p-4 rounded-lg text-center"><p className="text-sm text-gray-400">{label}</p><p className="text-2xl font-bold text-white">{value !== undefined ? value.toLocaleString() : 'N/A'}{value !== undefined && unit && <span className="text-base font-normal ml-1">{unit}</span>}</p></div>
 );
-const PlaystyleVisualizer = ({ ehp, ehb }: { ehp: number, ehb: number }) => {
+const PlaystyleDonut = ({ ehp, ehb }: { ehp: number, ehb: number }) => {
     const total = ehp + ehb; if (total === 0) return null; const ehpPercent = (ehp / total) * 100; const ehbPercent = (ehb / total) * 100;
     const dominantStyle = ehpPercent >= ehbPercent ? 'Skiller' : 'Bosser';
     const dominantPercent = ehpPercent >= ehbPercent ? ehpPercent : ehbPercent;
@@ -52,6 +52,22 @@ const CombatAchievements = ({ tier, tasksCompleted }: { tier: string, tasksCompl
     const { label, color } = getCATierStyle(tier);
     return (<div className="bg-slate-800/50 rounded-lg p-6"><div className="flex justify-between items-center"><h3 className="text-xl font-semibold text-orange-400">Combat Achievements</h3><span className={`px-3 py-1 text-sm font-bold rounded-full border ${color}`}>{label}</span></div><p className="text-center text-sm mt-4 text-gray-400">{tasksCompleted.toLocaleString()} tasks completed</p></div>);
 };
+const TopSkillsPanel = ({ skills }: { skills: any }) => {
+    const topSkills = Object.entries(skills).filter(([name]) => name !== 'overall').sort(([, a]: [string, any], [, b]: [string, any]) => (b.experience ?? 0) - (a.experience ?? 0)).slice(0, 3);
+    return (<div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700"><h3 className="text-xl font-semibold text-orange-400 mb-4 border-b-2 border-orange-500/30 pb-2">Top 3 Skills</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-4">{topSkills.map(([name, data]: [string, any]) => (<div key={name} className="bg-slate-700/50 p-4 rounded-lg text-center"><Image src={`/ranks/skills/${name}.png`} alt={name} width={32} height={32} className="mx-auto mb-2" /><p className="font-bold text-white capitalize">{formatName(name)}</p><p className="text-2xl text-yellow-400">{data.level}</p><p className="text-xs text-gray-500">{(data.experience ?? 0).toLocaleString()} XP</p></div>))}</div></div>);
+};
+const GlobalCompetitorPanel = ({ bosses }: { bosses: any }) => {
+    const topRankedBosses = Object.entries(bosses).filter(([, data]: [string, any]) => data.rank && data.rank > 0).sort(([, a]: [string, any], [, b]: [string, any]) => a.rank - b.rank).slice(0, 3);
+    if (topRankedBosses.length === 0) return null;
+    return (<div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700 h-full"><h3 className="text-xl font-semibold text-orange-400 mb-2">Global Competitor Rankings</h3><p className="text-xs text-gray-500 mb-4">Sorted by best global rank on Wise Old Man.</p><div className="space-y-3">{topRankedBosses.map(([name, data]: [string, any]) => (<div key={name} className="bg-slate-700/50 p-4 rounded-lg"><div className="flex justify-between items-center"><p className="font-bold text-white">{formatName(name)}</p><p className="font-semibold text-cyan-400">Ranked #{data.rank.toLocaleString()} Globally</p></div><p className="text-sm text-gray-400 mt-1">({(data.kills ?? 0).toLocaleString()} Kills)</p></div>))}</div></div>);
+};
+const ClueScrollTracker = ({ activities }: { activities: any }) => {
+    const clueTiers = [ { name: 'Easy', key: 'clue_scrolls_easy' }, { name: 'Medium', key: 'clue_scrolls_medium' }, { name: 'Hard', key: 'clue_scrolls_hard' }, { name: 'Elite', key: 'clue_scrolls_elite' }, { name: 'Master', key: 'clue_scrolls_master' }, { name: 'All', key: 'clue_scrolls_all' }, ];
+    const completedClues = clueTiers.map(tier => ({ name: tier.name, score: activities[tier.key]?.score || 0 })).filter(clue => clue.score > 0);
+    if (completedClues.length === 0) return null;
+    return (<div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700"><h3 className="text-xl font-semibold text-orange-400 mb-4 border-b-2 border-orange-500/30 pb-2">Clue Scroll Completions</h3><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">{completedClues.map(clue => (<div key={clue.name} className="bg-slate-700/50 p-4 rounded-lg text-center"><Image src={`/ranks/clues/${clue.name.toLowerCase()}.png`} alt={`${clue.name} Clue`} width={28} height={28} className="mx-auto mb-2"/><p className="text-sm font-bold text-white">{clue.name}</p><p className="text-lg text-yellow-400">{clue.score.toLocaleString()}</p></div>))}</div></div>);
+};
+
 
 // This component now accepts a simple `playerId` string as a prop.
 export default function PlayerPageClient({ playerId }: { playerId: string }) {
@@ -75,13 +91,6 @@ export default function PlayerPageClient({ playerId }: { playerId: string }) {
     };
     fetchPlayerDetails();
   }, [playerId]);
-
-  const topBosses = player?.latestSnapshot?.data?.bosses ?
-    Object.entries(player.latestSnapshot.data.bosses)
-      .sort(([, a], [, b]) => (b.kills ?? -1) - (a.kills ?? -1))
-      .slice(0, 3)
-      .filter(([, data]) => (data.kills ?? 0) > 0)
-    : [];
 
   const snapshotData = player?.latestSnapshot?.data;
 
@@ -110,13 +119,7 @@ export default function PlayerPageClient({ playerId }: { playerId: string }) {
             </div>
             {snapshotData?.skills && <TopSkillsPanel skills={snapshotData.skills} />}
             {snapshotData?.activities && <ClueScrollTracker activities={snapshotData.activities} />}
-            {/* The PetShowcase component and its render call have been removed */}
-            {topBosses.length > 0 && (
-              <div className="bg-slate-800/50 rounded-lg p-6">
-                <h3 className="text-xl font-semibold text-orange-400 mb-4">Top 3 Boss Mastery</h3>
-                <div className="space-y-3">{topBosses.map(([name, data]) => (<BossTierCard key={name} name={name} kc={data.kills!} />))}</div>
-              </div>
-            )}
+            {/* The PetShowcase feature has been fully removed */}
           </div>
         )}
       </div>
