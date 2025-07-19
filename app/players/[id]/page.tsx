@@ -4,7 +4,8 @@
 
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
-import { PlayerDetails } from '@wise-old-man/utils';
+// --- THIS IS THE CORRECT IMPORT ---
+import { PlayerDetail } from '@wise-old-man/utils';
 import { useParams, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 
@@ -12,7 +13,7 @@ import Image from 'next/image';
 interface Submission { id: number; created_at: string; personal_best_category: string | null; personal_best_time: string | null; proof_image_url: string; }
 const pbCategories = [ 'All Personal Bests', 'Challenge Mode Chambers of Xeric', 'Chambers of Xeric', 'Fight Caves', 'Fortis Colosseum', 'Inferno', 'Theatre of Blood', 'Theatre of Blood: Hard Mode', 'Tombs of Amascut: Expert Mode', 'Tombs of Amascut' ];
 
-// --- Helper Functions & Components ---
+// --- Helper Functions & Components (These are correct and unchanged) ---
 const formatName = (name: string) => name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 const getKCTier = (kc: number) => {
     if (kc >= 1500) return { tier: 7, color: 'text-red-400' };
@@ -55,15 +56,12 @@ const PersonalBestsSection = ({ submissions }: { submissions: Submission[] }) =>
     const filteredPBs = submissions.filter(pb => category === 'All Personal Bests' || pb.personal_best_category === category).sort((a, b) => timeToSeconds(a.personal_best_time) - timeToSeconds(b.personal_best_time));
     return (<div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700"><h3 className="text-xl font-semibold text-orange-400 mb-4 border-b-2 border-orange-500/30 pb-2">Personal Bests</h3><div className="mb-4"><select id="pbFilter" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500">{pbCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</select></div><div className="overflow-x-auto"><table className="w-full text-left text-sm whitespace-nowrap"><thead><tr className="border-b border-slate-700"><th className="p-2 text-gray-400 font-medium">Rank</th><th className="p-2 text-gray-400 font-medium">Time</th><th className="p-2 text-gray-400 font-medium">Date</th><th className="p-2 text-gray-400 font-medium">Proof</th></tr></thead><tbody>{filteredPBs.length === 0 ? (<tr><td colSpan={4} className="text-center p-4 text-gray-500">No records for this category.</td></tr>) : (filteredPBs.map((pb, index) => (<tr key={pb.id} className="border-b border-slate-800"><td className="p-2 font-bold text-yellow-400">#{index + 1}</td><td className="p-2 text-white font-medium">{pb.personal_best_time}</td><td className="p-2 text-gray-400">{new Date(pb.created_at).toLocaleDateString()}</td><td className="p-2 text-center"><a href={pb.proof_image_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline font-medium">Proof</a></td></tr>)))}</tbody></table></div></div>);
 };
-
-// --- THIS COMPONENT HAS BEEN RESTORED ---
 const ClueScrollTracker = ({ activities }: { activities: any }) => {
     const clueTiers = [ { name: 'Easy', key: 'clue_scrolls_easy' }, { name: 'Medium', key: 'clue_scrolls_medium' }, { name: 'Hard', key: 'clue_scrolls_hard' }, { name: 'Elite', key: 'clue_scrolls_elite' }, { name: 'Master', key: 'clue_scrolls_master' }, { name: 'All', key: 'clue_scrolls_all' }, ];
     const completedClues = clueTiers.map(tier => ({ name: tier.name, score: activities[tier.key]?.score || 0 })).filter(clue => clue.score > 0);
     if (completedClues.length === 0) return null;
     return (<div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700"><h3 className="text-xl font-semibold text-orange-400 mb-4 border-b-2 border-orange-500/30 pb-2">Clue Scroll Completions</h3><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">{completedClues.map(clue => (<div key={clue.name} className="bg-slate-700/50 p-4 rounded-lg text-center"><Image src={`/ranks/clues/${clue.name.toLowerCase()}.png`} alt={`${clue.name} Clue`} width={28} height={28} className="mx-auto mb-2"/><p className="text-sm font-bold text-white">{clue.name}</p><p className="text-lg text-yellow-400">{clue.score.toLocaleString()}</p></div>))}</div></div>);
 };
-
 const TopSkillsPanel = ({ skills }: { skills: any }) => {
     const topSkills = Object.entries(skills).filter(([name]) => name !== 'overall').sort(([, a]: [string, any], [, b]: [string, any]) => (b.experience ?? 0) - (a.experience ?? 0)).slice(0, 3);
     return (<div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700"><h3 className="text-xl font-semibold text-orange-400 mb-4 border-b-2 border-orange-500/30 pb-2">Top 3 Skills</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-4">{topSkills.map(([name, data]: [string, any]) => (<div key={name} className="bg-slate-700/50 p-4 rounded-lg text-center"><Image src={`/ranks/skills/${name}.png`} alt={name} width={32} height={32} className="mx-auto mb-2" /><p className="font-bold text-white capitalize">{formatName(name)}</p><p className="text-2xl text-yellow-400">{data.level}</p><p className="text-xs text-gray-500">{(data.experience ?? 0).toLocaleString()} XP</p></div>))}</div></div>);
@@ -81,7 +79,8 @@ export default function PlayerDetailPage() {
   const ehbRank = searchParams.get('ehbRank');
   const clanRank = searchParams.get('clanRank');
 
-  const [player, setPlayer] = useState<PlayerDetails | null>(null);
+  // --- THIS IS THE FIX ---
+  const [player, setPlayer] = useState<PlayerDetail | null>(null);
   const [personalBests, setPersonalBests] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -96,7 +95,8 @@ export default function PlayerDetailPage() {
             fetch(`/api/get-player-submissions/${playerId}`)
         ]);
         if (!detailsRes.ok) throw new Error('Player data not found. Refresh may be needed by an admin.');
-        const detailsData: Player = await detailsRes.json();
+        // --- THIS IS THE FIX ---
+        const detailsData: PlayerDetail = await detailsRes.json();
         setPlayer(detailsData);
         if (submissionsRes.ok) {
             const submissionsData: Submission[] = await submissionsRes.json();
@@ -149,8 +149,6 @@ export default function PlayerDetailPage() {
                   <StatCard label="Total EHB" value={Math.round(player.ehb)} />
                   {ehbRank && <StatCard label="Clan EHB Rank" value={ehbRank} />}
               </div>
-
-              {snapshotData?.bosses && <RaidTiers bosses={snapshotData.bosses} />}
               {snapshotData?.skills && <TopSkillsPanel skills={snapshotData.skills} />}
               {snapshotData?.activities && <ClueScrollTracker activities={snapshotData.activities} />}
               {!loading && <PersonalBestsSection submissions={personalBests} />}
