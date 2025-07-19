@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
-import { Player, Pet } from '@wise-old-man/utils';
+import { Player } from '@wise-old-man/utils';
 import { useParams, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 
