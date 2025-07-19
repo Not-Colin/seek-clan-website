@@ -3,8 +3,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
-
-// NOTE: We no longer need the @wise-old-man/utils client for this file.
+import { WOMClient } from '@wise-old-man/utils';
 
 interface PlayerBountyCounts { low: number; medium: number; high: number; total: number; }
 interface ClanMemberRanked { id: number; username: string; displayName: string; ehb: number; ehp: number; accountType: string; ttm: number; bounties: PlayerBountyCounts; currentRank: string; rankOrder: number; requirementsMet: string[]; nextRankRequirements: string[]; }
@@ -59,6 +58,8 @@ function getPlayerRank(playerStats: { ehb: number; }, bountyCounts: PlayerBounty
     return { rank: currentRank, order: currentOrder, next: nextRankRequirements };
 }
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export async function POST(request: Request) {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -73,10 +74,11 @@ export async function POST(request: Request) {
 
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
     const womUrl = `https://api.wiseoldman.net/v2/groups/${WOM_GROUP_ID}`;
+    const womClient = new WOMClient();
 
     try {
         const [groupRes, submissionsRes] = await Promise.all([
-            fetch(womUrl), // This is now our ONLY call to the WOM API
+            fetch(womUrl),
             supabaseAdmin.from('submissions').select('wom_player_id, bounty_tier').eq('status', 'approved').eq('submission_type', 'bounty'),
         ]);
 
@@ -88,15 +90,26 @@ export async function POST(request: Request) {
         const { data: approvedSubmissions, error: submissionsError } = submissionsRes;
         if (submissionsError) throw submissionsError;
 
-        // --- OPTIMIZED: Use the detailed player data that's already in the response ---
-        const upsertData = womMemberships
-            .filter((m: any) => m.player) // Filter out any invalid members
-            .map((m: any) => ({
-                wom_player_id: m.player.id,
-                wom_details_json: m.player, // The full player object is already here!
-                last_updated: new Date().toISOString(),
-            }));
+        console.log(`Starting to fetch details for ${womMemberships.length} players...`);
+        const allPlayerDetails = [];
+        const playerIds = womMemberships.map((m: any) => m.player.id).filter(Boolean);
+        const batchSize = 15;
 
+        for (let i = 0; i < playerIds.length; i += batchSize) {
+            const batch = playerIds.slice(i, i + batchSize);
+            console.log(`Fetching batch ${Math.floor(i / batchSize) + 1}...`);
+            const promises = batch.map((id: number) => womClient.players.getPlayerDetailsById(id));
+            const results = await Promise.all(promises);
+            allPlayerDetails.push(...results);
+            await sleep(1500);
+        }
+
+        const validPlayerDetails = allPlayerDetails.filter(details => details !== null);
+        const upsertData = validPlayerDetails.map(details => ({
+            wom_player_id: details!.id,
+            wom_details_json: details,
+            last_updated: new Date().toISOString(),
+        }));
         if (upsertData.length > 0) {
             const { error: upsertError } = await supabaseAdmin.from('player_details').upsert(upsertData, { onConflict: 'wom_player_id' });
             if (upsertError) console.error("Error upserting player details:", upsertError);
@@ -120,28 +133,21 @@ export async function POST(request: Request) {
         womMemberships.forEach((membership: any) => {
             const player = membership.player;
             if (!player) return;
+            const { id: playerId, username, displayName, ehb, ehp, ttm, type, role } = { ...player, role: membership.role };
+            const roundedEhb = Math.round(ehb || 0);
 
-            const playerId = player.id;
-            const username = player.username;
-            const displayName = player.displayName;
-            const ehb = Math.round(player.ehb || 0);
-            const ehp = Math.round(player.ehp || 0);
-            const ttm = Math.round(player.ttm || 0);
-            const accountType = player.type || 'unknown';
-            const role = membership.role || 'member';
-
-            ehbLeaderboard.push({ username, displayName, ehb });
-            ehpLeaderboard.push({ username, displayName, ehp });
+            ehbLeaderboard.push({ username, displayName, ehb: roundedEhb });
+            ehpLeaderboard.push({ username, displayName, ehp: Math.round(ehp || 0) });
 
             if (SPECIAL_ROLES.has(role)) {
-                clanMembersRanked.push({ id: playerId, username, displayName, ehb, ehp, accountType, ttm, bounties: { low: 0, medium: 0, high: 0, total: 0 }, currentRank: ROLE_DISPLAY_NAMES[role] || role, rankOrder: ROLE_SORT_ORDER[role] || -99, requirementsMet: [], nextRankRequirements: ["N/A for this role"], });
+                clanMembersRanked.push({ id: playerId, username, displayName, ehb: roundedEhb, ehp: Math.round(ehp || 0), accountType: type || 'unknown', ttm: Math.round(ttm || 0), bounties: { low: 0, medium: 0, high: 0, total: 0 }, currentRank: ROLE_DISPLAY_NAMES[role] || role, rankOrder: ROLE_SORT_ORDER[role] || -99, requirementsMet: [], nextRankRequirements: ["N/A for this role"], });
                 return;
             }
 
             const bounties = playerBountyCounts[playerId] || { low: 0, medium: 0, high: 0, total: 0 };
-            const { rank, order, next } = getPlayerRank({ ehb }, bounties);
+            const { rank, order, next } = getPlayerRank({ ehb: roundedEhb }, bounties);
 
-            clanMembersRanked.push({ id: playerId, username, displayName, ehb, ehp, accountType, ttm, bounties, currentRank: rank, rankOrder: order, requirementsMet: [], nextRankRequirements: next, });
+            clanMembersRanked.push({ id: playerId, username, displayName, ehb: roundedEhb, ehp: Math.round(ehp || 0), accountType: type || 'unknown', ttm: Math.round(ttm || 0), bounties, currentRank: rank, rankOrder: order, requirementsMet: [], nextRankRequirements: next, });
         });
 
         ehbLeaderboard.sort((a, b) => b.ehb - a.ehb);
@@ -162,7 +168,7 @@ export async function POST(request: Request) {
         revalidatePath('/ranks');
         revalidatePath('/');
 
-        return NextResponse.json({ message: `Clan data refreshed successfully. (1 WOM API Call)` });
+        return NextResponse.json({ message: `Clan data and ${validPlayerDetails.length} player details refreshed successfully.` });
 
     } catch (error: any) {
         console.error('Refresh API Error:', error);

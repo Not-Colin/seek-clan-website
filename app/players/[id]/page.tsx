@@ -4,8 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
-// --- THIS IS THE CORRECT IMPORT ---
-import { PlayerDetails } from '@wise-old-man/utils';
+import { WOMPlayer, Pet } from '@wise-old-man/utils';
 import { useParams, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 
@@ -13,7 +12,26 @@ import Image from 'next/image';
 interface Submission { id: number; created_at: string; personal_best_category: string | null; personal_best_time: string | null; proof_image_url: string; }
 const pbCategories = [ 'All Personal Bests', 'Challenge Mode Chambers of Xeric', 'Chambers of Xeric', 'Fight Caves', 'Fortis Colosseum', 'Inferno', 'Theatre of Blood', 'Theatre of Blood: Hard Mode', 'Tombs of Amascut: Expert Mode', 'Tombs of Amascut' ];
 
-// --- Helper Functions & Components (These are correct and unchanged) ---
+// --- THIS IS THE FIX ---
+// The rankImageMap constant was missing from this file. It has been added back.
+const rankImageMap: { [key: string]: string } = {
+  'Clan Owner': '/ranks/owner.png',
+  'Deputy Owner': '/ranks/deputy_owner.png',
+  'Administrator': '/ranks/bandosian.png',
+  'Alternate Account': '/ranks/minion.png',
+  'Infernal': '/ranks/infernal.png',
+  'Zenyte': '/ranks/zenyte.png',
+  'Onyx': '/ranks/onyx.png',
+  'Dragonstone': '/ranks/dragonstone.png',
+  'Diamond': '/ranks/diamond.png',
+  'Ruby': '/ranks/ruby.png',
+  'Emerald': '/ranks/emerald.png',
+  'Sapphire': '/ranks/sapphire.png',
+  'Opal': '/ranks/opal.png',
+  'Backpack': '/ranks/backpack.png',
+};
+
+// --- Helper Functions & Components ---
 const formatName = (name: string) => name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 const getKCTier = (kc: number) => {
     if (kc >= 1500) return { tier: 7, color: 'text-red-400' };
@@ -79,8 +97,7 @@ export default function PlayerDetailPage() {
   const ehbRank = searchParams.get('ehbRank');
   const clanRank = searchParams.get('clanRank');
 
-  // --- THIS IS THE FIX ---
-  const [player, setPlayer] = useState<PlayerDetails | null>(null);
+  const [player, setPlayer] = useState<WOMPlayer | null>(null);
   const [personalBests, setPersonalBests] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -95,8 +112,7 @@ export default function PlayerDetailPage() {
             fetch(`/api/get-player-submissions/${playerId}`)
         ]);
         if (!detailsRes.ok) throw new Error('Player data not found. Refresh may be needed by an admin.');
-        // --- THIS IS THE FIX ---
-        const detailsData: PlayerDetails = await detailsRes.json();
+        const detailsData: WOMPlayer = await detailsRes.json();
         setPlayer(detailsData);
         if (submissionsRes.ok) {
             const submissionsData: Submission[] = await submissionsRes.json();
@@ -109,7 +125,9 @@ export default function PlayerDetailPage() {
   }, [playerId]);
 
   const snapshotData = player?.latestSnapshot?.data;
-  const rankImageSrc = clanRank ? `/ranks/${decodeURIComponent(clanRank).toLowerCase().replace(/ /g, '_')}.png` : null;
+  // --- THIS IS THE FIX ---
+  // The rankImageSrc variable was missing and has been re-added.
+  const rankImageSrc = clanRank ? rankImageMap[decodeURIComponent(clanRank)] : null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
@@ -146,7 +164,7 @@ export default function PlayerDetailPage() {
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <StatCard label="Total EHB" value={Math.round(player.ehb)} />
+                  <StatCard label="Total EHB" value={Math.round(player.ehp)} />
                   {ehbRank && <StatCard label="Clan EHB Rank" value={ehbRank} />}
               </div>
               {snapshotData?.bosses && <RaidTiers bosses={snapshotData.bosses} />}
