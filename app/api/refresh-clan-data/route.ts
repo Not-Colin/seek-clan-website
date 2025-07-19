@@ -1,12 +1,12 @@
-// app/api/refresh-clan-data/route.ts - FINAL with Player ID in output
+// app/api/refresh-clan-data/route.ts
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
+import { WOMClient } from '@wise-old-man/utils';
 
-// Add the 'id' property to the interface for type safety
-interface ClanMemberRanked { id: number; username: string; displayName: string; ehb: number; ehp: number; accountType: string; ttm: number; bounties: PlayerBountyCounts; currentRank: string; rankOrder: number; requirementsMet: string[]; nextRankRequirements: string[]; }
 interface PlayerBountyCounts { low: number; medium: number; high: number; total: number; }
+interface ClanMemberRanked { id: number; username: string; displayName: string; ehb: number; ehp: number; accountType: string; ttm: number; bounties: PlayerBountyCounts; currentRank: string; rankOrder: number; requirementsMet: string[]; nextRankRequirements: string[]; }
 
 const RANK_DEFINITIONS = [
     { name: "Infernal", order: 10, criteria: [ { type: "total_bounties", min: 12 }, { type: "high_bounties", min: 3 }, { type: "ehb", min: 1000 }, ]},
@@ -72,6 +72,7 @@ export async function POST(request: Request) {
 
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
     const womUrl = `https://api.wiseoldman.net/v2/groups/${WOM_GROUP_ID}`;
+    const womClient = new WOMClient();
 
     try {
         const [groupRes, submissionsRes] = await Promise.all([
@@ -86,6 +87,24 @@ export async function POST(request: Request) {
 
         const { data: approvedSubmissions, error: submissionsError } = submissionsRes;
         if (submissionsError) throw submissionsError;
+
+        const playerDetailPromises = womMemberships.map((membership: any) => {
+            if (membership.player?.id) {
+                return womClient.players.getPlayerDetailsById(membership.player.id);
+            }
+            return Promise.resolve(null);
+        });
+        const playerDetailsResults = await Promise.all(playerDetailPromises);
+        const validPlayerDetails = playerDetailsResults.filter(details => details !== null);
+        const upsertData = validPlayerDetails.map(details => ({
+            wom_player_id: details!.id,
+            wom_details_json: details,
+            last_updated: new Date().toISOString(),
+        }));
+        if (upsertData.length > 0) {
+            const { error: upsertError } = await supabaseAdmin.from('player_details').upsert(upsertData, { onConflict: 'wom_player_id' });
+            if (upsertError) console.error("Error upserting player details:", upsertError);
+        }
 
         const playerBountyCounts: { [playerId: number]: PlayerBountyCounts } = {};
         approvedSubmissions.forEach(sub => {
@@ -120,8 +139,7 @@ export async function POST(request: Request) {
 
             if (SPECIAL_ROLES.has(role)) {
                 clanMembersRanked.push({
-                    id: playerId, // ADDED ID
-                    username, displayName, ehb, ehp, accountType, ttm,
+                    id: playerId, username, displayName, ehb, ehp, accountType, ttm,
                     bounties: { low: 0, medium: 0, high: 0, total: 0 },
                     currentRank: ROLE_DISPLAY_NAMES[role] || role,
                     rankOrder: ROLE_SORT_ORDER[role] || -99,
@@ -135,8 +153,7 @@ export async function POST(request: Request) {
             const { rank, order, next } = getPlayerRank({ ehb }, bounties);
 
             clanMembersRanked.push({
-                id: playerId, // ADDED ID
-                username, displayName, ehb, ehp, accountType, ttm, bounties,
+                id: playerId, username, displayName, ehb, ehp, accountType, ttm, bounties,
                 currentRank: rank, rankOrder: order,
                 requirementsMet: [],
                 nextRankRequirements: next,
@@ -161,7 +178,7 @@ export async function POST(request: Request) {
         revalidatePath('/ranks');
         revalidatePath('/');
 
-        return NextResponse.json({ message: `Clan data refreshed successfully.` });
+        return NextResponse.json({ message: `Clan data and ${validPlayerDetails.length} player details refreshed successfully.` });
 
     } catch (error: any) {
         console.error('Refresh API Error:', error);

@@ -1,12 +1,14 @@
-// app/ranks/page.tsx - FINAL with rank images on the right & rank text retained
+// app/ranks/page.tsx
 
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import Header from '@/components/Header';
-import Image from 'next/image'; // Import the Next.js Image component
+import Image from 'next/image';
+import Link from 'next/link';
 
 interface ClanMemberRanked {
+  id: number;
   username: string;
   displayName: string;
   ehb: number;
@@ -24,8 +26,6 @@ interface ApiClanDataResponse {
   rankedPlayers: ClanMemberRanked[];
 }
 
-// This object maps the rank name from the backend to the image file in /public/ranks/
-// Make sure your filenames in /public/ranks/ are lowercase and match the values here.
 const rankImageMap: { [key: string]: string } = {
   'Clan Owner': '/ranks/owner.png',
   'Deputy Owner': '/ranks/deputy_owner.png',
@@ -42,7 +42,6 @@ const rankImageMap: { [key: string]: string } = {
   'Opal': '/ranks/opal.png',
   'Backpack': '/ranks/backpack.png',
 };
-
 
 export default function RanksPage() {
   const [rankedPlayers, setRankedPlayers] = useState<ClanMemberRanked[]>([]);
@@ -72,6 +71,8 @@ export default function RanksPage() {
     (player.displayName || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const ehbSortedPlayers = [...rankedPlayers].sort((a, b) => b.ehb - a.ehb);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
       <Header />
@@ -97,31 +98,21 @@ export default function RanksPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredPlayers.map((player) => {
                   const rankImgSrc = rankImageMap[player.currentRank];
+                  const ehbRank = ehbSortedPlayers.findIndex(p => p.id === player.id) + 1;
 
                   return (
-                    <div key={player.username} className="bg-slate-700/50 p-6 rounded-lg border border-slate-600">
-                      {/* --- START MODIFIED SECTION --- */}
-
-                      {/* Display player name with rank icon on the RIGHT */}
+                    <Link
+                      key={player.id}
+                      href={`/players/${player.id}?ehbRank=${ehbRank}&clanRank=${encodeURIComponent(player.currentRank)}`}
+                      className="block bg-slate-700/50 p-6 rounded-lg border border-slate-600 hover:border-orange-500 transition-colors duration-200"
+                    >
                       <div className="flex items-center mb-2">
                         <h3 className="text-xl font-bold text-orange-400">{player.displayName}</h3>
                         {rankImgSrc && (
-                          <Image
-                            src={rankImgSrc}
-                            alt={`${player.currentRank} Rank`}
-                            width={18}
-                            height={18}
-                            className="ml-2" // margin-left to create space
-                          />
+                          <Image src={rankImgSrc} alt={`${player.currentRank} Rank`} width={18} height={18} className="ml-2" />
                         )}
                       </div>
-
-                      {/* Re-added the text-based rank line as requested */}
                       <p className="text-lg font-semibold text-white mb-4">Rank: {player.currentRank}</p>
-
-                      {/* --- END MODIFIED SECTION --- */}
-
-                      {/* Stats section remains unchanged */}
                       <div className="space-y-1 text-sm text-gray-300">
                           <p>Account Type: <span className="font-semibold capitalize">{player.accountType}</span></p>
                           <p>Hours to Max: <span className="font-semibold">{(player.ttm || 0).toLocaleString()}</span></p>
@@ -129,7 +120,6 @@ export default function RanksPage() {
                           <p>EHP: <span className="font-semibold">{(player.ehp || 0).toLocaleString()}</span></p>
                           <p>Total Bounties: <span className="font-semibold">{(player.bounties?.total || 0)}</span></p>
                       </div>
-
                       {player.nextRankRequirements && player.nextRankRequirements.length > 0 && (
                         <div className="mt-4">
                           <p className="font-semibold text-blue-400 text-sm mb-1">Next Rank Goals:</p>
@@ -138,7 +128,7 @@ export default function RanksPage() {
                           </ul>
                         </div>
                       )}
-                    </div>
+                    </Link>
                   );
                 })}
               </div>

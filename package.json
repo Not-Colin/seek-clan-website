@@ -11,6 +11,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.44.2",
     "@vercel/edge-config": "^1.4.0",
+    "@wise-old-man/utils": "^3.3.14",
     "next": "15.3.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
