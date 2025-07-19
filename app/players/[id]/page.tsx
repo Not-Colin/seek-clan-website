@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
 // --- THIS IS THE CORRECT IMPORT ---
-import { PlayerDetail } from '@wise-old-man/utils';
+import { PlayerDetails } from '@wise-old-man/utils';
 import { useParams, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 
@@ -80,7 +80,7 @@ export default function PlayerDetailPage() {
   const clanRank = searchParams.get('clanRank');
 
   // --- THIS IS THE FIX ---
-  const [player, setPlayer] = useState<PlayerDetail | null>(null);
+  const [player, setPlayer] = useState<PlayerDetails | null>(null);
   const [personalBests, setPersonalBests] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -96,7 +96,7 @@ export default function PlayerDetailPage() {
         ]);
         if (!detailsRes.ok) throw new Error('Player data not found. Refresh may be needed by an admin.');
         // --- THIS IS THE FIX ---
-        const detailsData: PlayerDetail = await detailsRes.json();
+        const detailsData: PlayerDetails = await detailsRes.json();
         setPlayer(detailsData);
         if (submissionsRes.ok) {
             const submissionsData: Submission[] = await submissionsRes.json();
