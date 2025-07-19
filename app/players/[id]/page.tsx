@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
-import { WOMPlayer, Pet } from '@wise-old-man/utils';
+import { PlayerDetails} from '@wise-old-man/utils';
 import { useParams, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 
@@ -97,7 +97,7 @@ export default function PlayerDetailPage() {
   const ehbRank = searchParams.get('ehbRank');
   const clanRank = searchParams.get('clanRank');
 
-  const [player, setPlayer] = useState<WOMPlayer | null>(null);
+  const [player, setPlayer] = useState<PlayerDetails | null>(null);
   const [personalBests, setPersonalBests] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -112,7 +112,7 @@ export default function PlayerDetailPage() {
             fetch(`/api/get-player-submissions/${playerId}`)
         ]);
         if (!detailsRes.ok) throw new Error('Player data not found. Refresh may be needed by an admin.');
-        const detailsData: WOMPlayer = await detailsRes.json();
+        const detailsData: PlayerDetails = await detailsRes.json();
         setPlayer(detailsData);
         if (submissionsRes.ok) {
             const submissionsData: Submission[] = await submissionsRes.json();
