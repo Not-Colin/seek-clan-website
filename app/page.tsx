@@ -120,11 +120,11 @@ export default function Home() {
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1 bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-4 flex items-center"><i className="ri-sword-fill text-red-400 mr-2"></i>Top 3 EHB</h3>
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center"><i className="ri-sword-fill text-red-400 mr-2"></i>Top 3 Efficient Hours Bossed</h3>
               {loading ? <p className='text-gray-400'>Loading...</p> : topEHB.length === 0 ? <p className="text-gray-400 text-center py-4">No EHB data found.</p> : (<div className="space-y-4">{topEHB.map((member, index) => (<div key={member.username} className="p-3 rounded-lg border bg-slate-700/30 border-slate-600/50 flex items-center justify-between"><span className="font-bold text-white">#{index + 1} {member.displayName}</span><span className="font-bold text-red-400">{member.ehb.toLocaleString()}</span></div>))}</div>)}
             </div>
             <div className="lg:col-span-1 bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-4 flex items-center"><i className="ri-shield-star-fill text-blue-400 mr-2"></i>Top 3 EHP</h3>
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center"><i className="ri-shield-star-fill text-blue-400 mr-2"></i>Top 3 Efficient Hours Played</h3>
               {loading ? <p className='text-gray-400'>Loading...</p> : topEHP.length === 0 ? <p className="text-gray-400 text-center py-4">No EHP data found.</p> : (<div className="space-y-4">{topEHP.map((member, index) => (<div key={member.username} className="p-3 rounded-lg border bg-slate-700/30 border-slate-600/50 flex items-center justify-between"><span className="font-bold text-white">#{index + 1} {member.displayName}</span><span className="font-bold text-blue-400">{member.ehp.toLocaleString()}</span></div>))}</div>)}
             </div>
             <div className="lg:col-span-1 bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">

@@ -164,7 +164,7 @@ export default function PlayerDetailPage() {
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <StatCard label="Total EHB" value={Math.round(player.ehp)} />
+                  <StatCard label="Total EHB" value={Math.round(player.ehb)} />
                   {ehbRank && <StatCard label="Clan EHB Rank" value={ehbRank} />}
               </div>
               {snapshotData?.bosses && <RaidTiers bosses={snapshotData.bosses} />}
