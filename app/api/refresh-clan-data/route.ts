@@ -9,14 +9,14 @@ interface PlayerBountyCounts { low: number; medium: number; high: number; total:
 interface ClanMemberRanked { id: number; username: string; displayName: string; ehb: number; ehp: number; accountType: string; ttm: number; bounties: PlayerBountyCounts; currentRank: string; rankOrder: number; requirementsMet: string[]; nextRankRequirements: string[]; }
 
 const RANK_DEFINITIONS = [
-    { name: "Infernal", order: 10, criteria: [ { type: "total_bounties", min: 12 }, { type: "high_bounties", min: 3 }, { type: "ehb", min: 1000 }, ]},
-    { name: "Zenyte", order: 9, criteria: [ { type: "total_bounties", min: 9 }, { type: "high_bounties", min: 3 }, { type: "ehb", min: 1000 }, ]},
-    { name: "Onyx", order: 8, criteria: [ { type: "total_bounties", min: 7 }, { type: "high_bounties", min: 2 }, { type: "ehb", min: 750 }, ]},
-    { name: "Dragonstone", order: 7, criteria: [ { type: "total_bounties", min: 5 }, { type: "high_bounties", min: 1 }, { type: "ehb", min: 500 }, ]},
-    { name: "Diamond", order: 6, criteria: [ { type: "total_bounties", min: 4 }, { type: "medium_bounties", min: 2 }, { type: "ehb", min: 250 }, ]},
-    { name: "Ruby", order: 5, criteria: [ { type: "total_bounties", min: 3 }, { type: "medium_bounties", min: 1 }, { type: "ehb", min: 100 }, ]},
-    { name: "Emerald", order: 4, criteria: [ { type: "total_bounties", min: 2 }, { type: "ehb", min: 50 }, ]},
-    { name: "Sapphire", order: 3, criteria: [ { type: "total_bounties", min: 1 }, { type: "ehb", min: 25 }, ]},
+    { name: "Infernal", order: 10, criteria: [ { type: "low_bounties", min: 12 }, { type: "high_bounties", min: 3 }, { type: "ehb", min: 1000 }, ]},
+    { name: "Zenyte", order: 9, criteria: [ { type: "low_bounties", min: 9 }, { type: "high_bounties", min: 3 }, { type: "ehb", min: 1000 }, ]},
+    { name: "Onyx", order: 8, criteria: [ { type: "low_bounties", min: 7 }, { type: "high_bounties", min: 2 }, { type: "ehb", min: 750 }, ]},
+    { name: "Dragonstone", order: 7, criteria: [ { type: "low_bounties", min: 5 }, { type: "high_bounties", min: 1 }, { type: "ehb", min: 500 }, ]},
+    { name: "Diamond", order: 6, criteria: [ { type: "low_bounties", min: 4 }, { type: "medium_bounties", min: 2 }, { type: "ehb", min: 250 }, ]},
+    { name: "Ruby", order: 5, criteria: [ { type: "low_bounties", min: 3 }, { type: "medium_bounties", min: 1 }, { type: "ehb", min: 100 }, ]},
+    { name: "Emerald", order: 4, criteria: [ { type: "low_bounties", min: 2 }, { type: "ehb", min: 50 }, ]},
+    { name: "Sapphire", order: 3, criteria: [ { type: "low_bounties", min: 1 }, { type: "ehb", min: 25 }, ]},
     { name: "Opal", order: 2, criteria: [ { type: "ehb", min: 10 }, ]},
     { name: "Backpack", order: 1, criteria: [] },
 ];
@@ -25,16 +25,19 @@ const SPECIAL_ROLES = new Set(['owner', 'deputy_owner', 'bandosian', 'minion']);
 const ROLE_DISPLAY_NAMES: { [key: string]: string } = { owner: 'Clan Owner', deputy_owner: 'Deputy Owner', bandosian: 'Administrator', minion: 'Alternate Account' };
 const ROLE_SORT_ORDER: { [key: string]: number } = { minion: -1, bandosian: -2, owner: -3, deputy_owner: -3 };
 
+// Helper function for rate limiting
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 function getPlayerRank(playerStats: { ehb: number; }, bountyCounts: PlayerBountyCounts): { rank: string; order: number; next: string[] } {
     let currentRank = "Backpack"; let currentOrder = 1; let nextRankRequirements: string[] = [];
     for (const rankDef of RANK_DEFINITIONS) {
         if (!rankDef.criteria) continue;
-        const meetsAll = rankDef.criteria.every(c => {
-            switch(c.type) {
-                case "total_bounties": return bountyCounts.total >= c.min;
-                case "medium_bounties": return bountyCounts.medium >= c.min;
-                case "high_bounties": return bountyCounts.high >= c.min;
-                case "ehb": return playerStats.ehb >= c.min;
+        const meetsAll = rankDef.criteria.every(criterion => {
+            switch(criterion.type) {
+                case "low_bounties": return bountyCounts.total >= criterion.min;
+                case "medium_bounties": return (bountyCounts.medium + bountyCounts.high) >= criterion.min;
+                case "high_bounties": return bountyCounts.high >= criterion.min;
+                case "ehb": return playerStats.ehb >= criterion.min;
                 default: return false;
             }
         });
@@ -42,13 +45,13 @@ function getPlayerRank(playerStats: { ehb: number; }, bountyCounts: PlayerBounty
     }
     const nextRankDef = RANK_DEFINITIONS.find(r => r.order === currentOrder + 1);
     if (nextRankDef) {
-        nextRankDef.criteria.forEach(c => {
+        nextRankDef.criteria.forEach(criterion => {
             let needed = 0;
-            switch(c.type) {
-                case "total_bounties": if (bountyCounts.total < c.min) { needed = c.min - bountyCounts.total; nextRankRequirements.push(`Claim ${needed} more bounty/ies`);} break;
-                case "medium_bounties": if (bountyCounts.medium < c.min) { needed = c.min - bountyCounts.medium; nextRankRequirements.push(`Claim ${needed} more Medium bounty/ies`);} break;
-                case "high_bounties": if (bountyCounts.high < c.min) { needed = c.min - bountyCounts.high; nextRankRequirements.push(`Claim ${needed} more High bounty/ies`);} break;
-                case "ehb": if (playerStats.ehb < c.min) { needed = c.min - playerStats.ehb; nextRankRequirements.push(`Gain ${Math.ceil(needed).toLocaleString()} more EHB`);} break;
+            switch(criterion.type) {
+                case "low_bounties": if (bountyCounts.total < criterion.min) { needed = criterion.min - bountyCounts.total; nextRankRequirements.push(`Claim ${needed} more bounty/ies (any tier)`);} break;
+                case "medium_bounties": const effectiveMedium = bountyCounts.medium + bountyCounts.high; if (effectiveMedium < criterion.min) { needed = criterion.min - effectiveMedium; nextRankRequirements.push(`Claim ${needed} more Medium or High bounty/ies`);} break;
+                case "high_bounties": if (bountyCounts.high < criterion.min) { needed = criterion.min - bountyCounts.high; nextRankRequirements.push(`Claim ${needed} more High bounty/ies`);} break;
+                case "ehb": if (playerStats.ehb < criterion.min) { needed = criterion.min - playerStats.ehb; nextRankRequirements.push(`Gain ${Math.ceil(needed).toLocaleString()} more EHB`);} break;
             }
         });
         if (nextRankRequirements.length === 0) nextRankRequirements.push(`All requirements met for ${nextRankDef.name}!`);
@@ -57,8 +60,6 @@ function getPlayerRank(playerStats: { ehb: number; }, bountyCounts: PlayerBounty
     }
     return { rank: currentRank, order: currentOrder, next: nextRankRequirements };
 }
-
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export async function POST(request: Request) {
     const authHeader = request.headers.get('Authorization');
@@ -90,6 +91,7 @@ export async function POST(request: Request) {
         const { data: approvedSubmissions, error: submissionsError } = submissionsRes;
         if (submissionsError) throw submissionsError;
 
+        // --- BATCHING LOGIC RE-IMPLEMENTED ---
         console.log(`Starting to fetch details for ${womMemberships.length} players...`);
         const allPlayerDetails = [];
         const playerIds = womMemberships.map((m: any) => m.player.id).filter(Boolean);
@@ -97,15 +99,20 @@ export async function POST(request: Request) {
 
         for (let i = 0; i < playerIds.length; i += batchSize) {
             const batch = playerIds.slice(i, i + batchSize);
-            console.log(`Fetching batch ${Math.floor(i / batchSize) + 1}...`);
-            const promises = batch.map((id: number) => womClient.players.getPlayerDetailsById(id));
-            const results = await Promise.all(promises);
-            allPlayerDetails.push(...results);
-            await sleep(1500);
+            console.log(`Fetching batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(playerIds.length / batchSize)}...`);
+            try {
+                const promises = batch.map((id: number) => womClient.players.getPlayerDetailsById(id));
+                const results = await Promise.all(promises);
+                allPlayerDetails.push(...results.filter(Boolean)); // Filter out any potential nulls from failed fetches
+            } catch (batchError) {
+                console.error(`An error occurred in a fetch batch:`, batchError);
+            }
+            if (i + batchSize < playerIds.length) {
+                await sleep(1500); // Wait 1.5 seconds between batches
+            }
         }
 
-        const validPlayerDetails = allPlayerDetails.filter(details => details !== null);
-        const upsertData = validPlayerDetails.map(details => ({
+        const upsertData = allPlayerDetails.map(details => ({
             wom_player_id: details!.id,
             wom_details_json: details,
             last_updated: new Date().toISOString(),
@@ -114,6 +121,7 @@ export async function POST(request: Request) {
             const { error: upsertError } = await supabaseAdmin.from('player_details').upsert(upsertData, { onConflict: 'wom_player_id' });
             if (upsertError) console.error("Error upserting player details:", upsertError);
         }
+        // --- END OF BATCHING LOGIC ---
 
         const playerBountyCounts: { [playerId: number]: PlayerBountyCounts } = {};
         approvedSubmissions.forEach(sub => {
@@ -133,21 +141,40 @@ export async function POST(request: Request) {
         womMemberships.forEach((membership: any) => {
             const player = membership.player;
             if (!player) return;
-            const { id: playerId, username, displayName, ehb, ehp, ttm, type, role } = { ...player, role: membership.role };
-            const roundedEhb = Math.round(ehb || 0);
 
-            ehbLeaderboard.push({ username, displayName, ehb: roundedEhb });
-            ehpLeaderboard.push({ username, displayName, ehp: Math.round(ehp || 0) });
+            const playerId = player.id;
+            const username = player.username;
+            const displayName = player.displayName;
+            const ehb = Math.round(player.ehb || 0);
+            const ehp = Math.round(player.ehp || 0);
+            const ttm = Math.round(player.ttm || 0);
+            const accountType = player.type || 'unknown';
+            const role = membership.role || 'member';
+
+            ehbLeaderboard.push({ username, displayName, ehb });
+            ehpLeaderboard.push({ username, displayName, ehp });
 
             if (SPECIAL_ROLES.has(role)) {
-                clanMembersRanked.push({ id: playerId, username, displayName, ehb: roundedEhb, ehp: Math.round(ehp || 0), accountType: type || 'unknown', ttm: Math.round(ttm || 0), bounties: { low: 0, medium: 0, high: 0, total: 0 }, currentRank: ROLE_DISPLAY_NAMES[role] || role, rankOrder: ROLE_SORT_ORDER[role] || -99, requirementsMet: [], nextRankRequirements: ["N/A for this role"], });
+                clanMembersRanked.push({
+                    id: playerId, username, displayName, ehb, ehp, accountType, ttm,
+                    bounties: { low: 0, medium: 0, high: 0, total: 0 },
+                    currentRank: ROLE_DISPLAY_NAMES[role] || role,
+                    rankOrder: ROLE_SORT_ORDER[role] || -99,
+                    requirementsMet: [],
+                    nextRankRequirements: ["N/A for this role"],
+                });
                 return;
             }
 
             const bounties = playerBountyCounts[playerId] || { low: 0, medium: 0, high: 0, total: 0 };
-            const { rank, order, next } = getPlayerRank({ ehb: roundedEhb }, bounties);
+            const { rank, order, next } = getPlayerRank({ ehb }, bounties);
 
-            clanMembersRanked.push({ id: playerId, username, displayName, ehb: roundedEhb, ehp: Math.round(ehp || 0), accountType: type || 'unknown', ttm: Math.round(ttm || 0), bounties, currentRank: rank, rankOrder: order, requirementsMet: [], nextRankRequirements: next, });
+            clanMembersRanked.push({
+                id: playerId, username, displayName, ehb, ehp, accountType, ttm, bounties,
+                currentRank: rank, rankOrder: order,
+                requirementsMet: [],
+                nextRankRequirements: next,
+            });
         });
 
         ehbLeaderboard.sort((a, b) => b.ehb - a.ehb);
@@ -168,7 +195,7 @@ export async function POST(request: Request) {
         revalidatePath('/ranks');
         revalidatePath('/');
 
-        return NextResponse.json({ message: `Clan data and ${validPlayerDetails.length} player details refreshed successfully.` });
+        return NextResponse.json({ message: `Clan data and ${allPlayerDetails.length} player details refreshed successfully.` });
 
     } catch (error: any) {
         console.error('Refresh API Error:', error);
