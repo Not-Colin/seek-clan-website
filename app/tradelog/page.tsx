@@ -6,14 +6,16 @@ import { useState, useEffect, useCallback } from 'react';
 import Header from '@/components/Header';
 import { supabase } from '@/lib/supabaseClient';
 
+// --- CHANGE 1: Update the interface to support BOTH the old and new data structures ---
 interface LoggedTrade {
   id: number;
   created_at: string;
   player_name: string;
-  bounty_name: string | null;
   bounty_tier: 'low' | 'medium' | 'high' | null;
-  proof_image_url: string; // The original proof
-  trade_proof_url: string; // The trade proof
+  proof_image_url: string;
+  trade_proof_url: string;
+  bounty_name: string | null; // The old text field for back-ported bounties
+  bounties: { name: string } | null; // The new object for linked bounties
 }
 
 export default function TradeLogPage() {
@@ -22,12 +24,13 @@ export default function TradeLogPage() {
 
   const fetchLoggedTrades = useCallback(async () => {
     setLoading(true);
+    // The query remains the same, as it correctly fetches the new linked data
     const { data, error } = await supabase
       .from('submissions')
-      .select('*')
+      .select('*, bounties(name)')
       .eq('status', 'approved')
       .eq('submission_type', 'bounty')
-      .not('trade_proof_url', 'is', null) // Only fetch submissions that have a trade proof
+      .not('trade_proof_url', 'is', null)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -73,7 +76,10 @@ export default function TradeLogPage() {
                     {loggedTrades.map((trade) => (
                       <tr key={trade.id} className="border-b border-slate-800 hover:bg-slate-700/20">
                         <td className="p-3 text-white">{trade.player_name}</td>
-                        <td className="p-3 text-gray-300">{trade.bounty_name}</td>
+                        {/* --- CHANGE 2: Implement the smart fallback logic --- */}
+                        <td className="p-3 text-gray-300">
+                          {trade.bounties?.name || trade.bounty_name || 'Unknown Bounty'}
+                        </td>
                         <td className="p-3 text-green-400 font-semibold">{getRewardValue(trade.bounty_tier)}</td>
                         <td className="p-3 text-gray-400 text-sm">{new Date(trade.created_at).toLocaleDateString()}</td>
                         <td className="p-3 text-center">
