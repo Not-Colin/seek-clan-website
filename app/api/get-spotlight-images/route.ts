@@ -1,5 +1,5 @@
 // app/api/get-spotlight-images/route.ts
-// **FIXED BUILD ERROR: Removed redundant chromium.defaultViewport property**
+// **FINAL BUILD FIX: Moved 'ignoreHTTPSErrors' from launch() to goto()**
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -7,13 +7,11 @@ import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
 import puppeteerDev from 'puppeteer';
 
-// ... (constants are correct) ...
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const BATCH_SIZE = 5;
 const RECHECK_INTERVAL_HOURS = 24;
 
 export async function POST(request: Request) {
-    // ... (Authentication is correct) ...
     const authHeader = request.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const token = authHeader.split(' ')[1];
@@ -23,7 +21,6 @@ export async function POST(request: Request) {
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
     try {
-        // ... (Query logic is correct) ...
         const recheckTimestamp = new Date(Date.now() - RECHECK_INTERVAL_HOURS * 60 * 60 * 1000).toISOString();
         const { data: uncheckedMembers, error: membersError } = await supabaseAdmin.from('player_details').select('wom_player_id, wom_details_json').or(`last_checked_at.is.null,last_checked_at.lt.${recheckTimestamp}`).limit(BATCH_SIZE);
         if (membersError) throw membersError;
@@ -31,7 +28,6 @@ export async function POST(request: Request) {
             return NextResponse.json({ message: `All players are up to date. No new images to generate.` });
         }
 
-        // ... (Loop setup is correct) ...
         let successCount = 0;
         let failCount = 0;
         const nowTimestamp = new Date().toISOString();
@@ -48,22 +44,25 @@ export async function POST(request: Request) {
                 if (process.env.NODE_ENV === 'development') {
                     browser = await puppeteerDev.launch({ headless: true });
                 } else {
-                    // --- FIX IS HERE: 'defaultViewport' property removed ---
+                    // --- STEP 1: REMOVED from here ---
                     browser = await puppeteer.launch({
                         args: chromium.args,
                         executablePath: await chromium.executablePath(),
-                        headless: true,
-                        ignoreHTTPSErrors: true
+                        headless: true
                     });
                 }
 
                 const page = await browser.newPage();
                 await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36');
-                // This line makes the defaultViewport property redundant anyway
                 await page.setViewport({ width: 1920, height: 1080 });
-                await page.goto(profileUrl, { waitUntil: 'networkidle0', timeout: 30000 });
 
-                // ... (Rest of the file is correct) ...
+                // --- STEP 2: ADDED here ---
+                await page.goto(profileUrl, {
+                    waitUntil: 'networkidle0',
+                    timeout: 30000,
+                    ignoreHTTPSErrors: true
+                });
+
                 const raceResult = await Promise.race([
                     page.waitForSelector('.runescape-panel', { timeout: 25000 }).then(() => 'success'),
                     page.waitForFunction(() => { const p = document.querySelector('p.text-2xl'); return p && p.textContent.includes('Account not found.'); }, { timeout: 25000 }).then(() => 'failure'),

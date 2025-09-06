@@ -1,5 +1,5 @@
 // app/api/update-single-spotlight/route.ts
-// **FIXED BUILD ERROR: Removed redundant chromium.defaultViewport property**
+// **FINAL BUILD FIX: Moved 'ignoreHTTPSErrors' from launch() to goto()**
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -21,21 +21,24 @@ async function generateAndUpdatePlayer(playerId: number, supabaseAdmin: any) {
         if (process.env.NODE_ENV === 'development') {
             browser = await puppeteerDev.launch({ headless: true });
         } else {
-            // --- FIX IS HERE: 'defaultViewport' property removed ---
+            // --- STEP 1: REMOVED from here ---
             browser = await puppeteer.launch({
                 args: chromium.args,
                 executablePath: await chromium.executablePath(),
-                headless: true,
-                ignoreHTTPSErrors: true
+                headless: true
             });
         }
 
         const page = await browser.newPage();
-        // This line makes the defaultViewport property redundant anyway
         await page.setViewport({ width: 1920, height: 1080 });
-        await page.goto(profileUrl, { waitUntil: 'networkidle0', timeout: 30000 });
 
-        // ... (Rest of the function is correct) ...
+        // --- STEP 2: ADDED here ---
+        await page.goto(profileUrl, {
+            waitUntil: 'networkidle0',
+            timeout: 30000,
+            ignoreHTTPSErrors: true
+        });
+
         const raceResult = await Promise.race([
             page.waitForSelector('.runescape-panel', { timeout: 25000 }).then(() => 'success'),
             page.waitForFunction(() => { const p = document.querySelector('p.text-2xl'); return p && p.textContent.includes('Account not found.'); }, { timeout: 25000 }).then(() => 'failure'),
@@ -62,7 +65,6 @@ async function generateAndUpdatePlayer(playerId: number, supabaseAdmin: any) {
 }
 
 export async function POST(request: Request) {
-    // ... (Authentication and request handling logic is correct) ...
     const authHeader = request.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const token = authHeader.split(' ')[1];
