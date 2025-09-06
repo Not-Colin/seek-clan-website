@@ -25,9 +25,9 @@ async function generateAndUpdatePlayer(playerId: number, supabaseAdmin: any) {
         const profileUrl = `https://www.runeprofile.com/${formattedUsername}`;
 
         if (process.env.NODE_ENV === 'development') {
-            browser = await puppeteerDev.launch({ headless: 'new' });
+            browser = await puppeteerDev.launch({ headless: true });
         } else {
-            browser = await puppeteer.launch({ args: chromium.args, defaultViewport: chromium.defaultViewport, executablePath: await chromium.executablePath(), headless: 'new', ignoreHTTPSErrors: true });
+            browser = await puppeteer.launch({ args: chromium.args, defaultViewport: chromium.defaultViewport, executablePath: await chromium.executablePath(), headless: true, ignoreHTTPSErrors: true });
         }
 
         const page = await browser.newPage();

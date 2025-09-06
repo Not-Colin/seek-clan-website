@@ -75,9 +75,9 @@ export async function POST(request: Request) {
                 console.log(`[PUPPETEER] Navigating to ${profileUrl}`);
 
                 if (process.env.NODE_ENV === 'development') {
-                    browser = await puppeteerDev.launch({ headless: 'true' });
+                    browser = await puppeteerDev.launch({ headless: true });
                 } else {
-                    browser = await puppeteer.launch({ args: chromium.args, defaultViewport: chromium.defaultViewport, executablePath: await chromium.executablePath(), headless: 'true', ignoreHTTPSErrors: true });
+                    browser = await puppeteer.launch({ args: chromium.args, defaultViewport: chromium.defaultViewport, executablePath: await chromium.executablePath(), headless: true, ignoreHTTPSErrors: true });
                 }
 
                 const page = await browser.newPage();
