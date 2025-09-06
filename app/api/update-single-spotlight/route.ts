@@ -1,5 +1,5 @@
 // app/api/update-single-spotlight/route.ts
-// **FINAL BUILD FIX: Removed invalid 'ignoreHTTPSErrors' property**
+// **FINAL BUILD FIX: Added optional chaining to prevent 'possibly null' error**
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -31,7 +31,6 @@ async function generateAndUpdatePlayer(playerId: number, supabaseAdmin: any) {
         const page = await browser.newPage();
         await page.setViewport({ width: 1920, height: 1080 });
 
-        // --- FIX IS HERE: 'ignoreHTTPSErrors' property removed ---
         await page.goto(profileUrl, {
             waitUntil: 'networkidle0',
             timeout: 30000
@@ -39,7 +38,8 @@ async function generateAndUpdatePlayer(playerId: number, supabaseAdmin: any) {
 
         const raceResult = await Promise.race([
             page.waitForSelector('.runescape-panel', { timeout: 25000 }).then(() => 'success'),
-            page.waitForFunction(() => { const p = document.querySelector('p.text-2xl'); return p && p.textContent.includes('Account not found.'); }, { timeout: 25000 }).then(() => 'failure'),
+            // --- FIX IS HERE: Using optional chaining ?. ---
+            page.waitForFunction(() => { const p = document.querySelector('p.text-2xl'); return p?.textContent?.includes('Account not found.'); }, { timeout: 25000 }).then(() => 'failure'),
         ]);
 
         const nowTimestamp = new Date().toISOString();
