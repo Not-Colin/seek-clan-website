@@ -1,4 +1,4 @@
-// app/admin/page.tsx - FINAL version with single player spotlight updater
+// app/admin/page.tsx - FINAL version with single player spotlight updater & LINT FIX
 
 'use client';
 
@@ -149,7 +149,8 @@ export default function AdminPage() {
                                         <div className="relative flex py-3 items-center"><div className="flex-grow border-t border-slate-600"></div><span className="flex-shrink mx-4 text-xs text-gray-500">OR</span><div className="flex-grow border-t border-slate-600"></div></div>
                                         <div>
                                             <label className="block text-sm font-medium text-gray-300 mb-2">Batch Update</label>
-                                            <p className="text-xs text-gray-400 mb-2">Scans players who haven't been checked recently and generates images.</p>
+                                            {/* --- LINT FIX HERE --- */}
+                                            <p className="text-xs text-gray-400 mb-2">Scans players who haven&apos;t been checked recently and generates images.</p>
                                             <button type="button" onClick={handleGenerateSpotlight} disabled={isGeneratingSpotlight} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg disabled:bg-slate-600 disabled:cursor-wait">{isGeneratingSpotlight ? 'Generating Images...' : 'Generate Spotlight Images (Batch)'}</button>
                                             {spotlightStatus && (<p className="text-center text-sm mt-2 text-gray-300">{spotlightStatus}</p>)}
                                         </div>

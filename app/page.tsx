@@ -1,4 +1,4 @@
-// app/page.tsx - FINAL with Robust 3-Player Showcase Logic
+// app/page.tsx - FINAL with <img> Revert and Linting Fix
 
 'use client';
 
@@ -7,7 +7,8 @@ import DataCard from '../components/DataCard';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
-import Image from 'next/image';
+// We are no longer using the Next.js Image component in this file.
+// import Image from 'next/image';
 
 // --- Interfaces & Helpers ---
 interface SpotlightPlayer { id: number; displayName: string; currentRank: string; imageUrl: string; }
@@ -21,10 +22,13 @@ const PlayerSpotlightCard = ({ player }: { player: SpotlightPlayer; }) => {
       <Link href={profileUrl} className="block group">
         <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl transition-all duration-300 group-hover:border-orange-500/50 group-hover:scale-105 shadow-lg overflow-hidden">
           <div className="relative p-4 h-[300px]">
+            {/* --- REVERTED TO <img> TAG TO FIX RUNTIME ERROR --- */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={player.imageUrl}
               alt={`Character model for ${player.displayName}`}
               className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-auto h-auto max-h-[280px]"
+              loading="lazy"
             />
           </div>
         </div>
@@ -62,34 +66,19 @@ export default function Home() {
       if (playersWithImagesError) throw playersWithImagesError;
 
       if (data.rankedPlayers?.length > 0 && playersWithImages?.length > 0) {
-        // Create a Set of WOM IDs for players who have an image, for fast lookups.
         const playersWithImagesSet = new Set(playersWithImages.map(p => p.wom_player_id));
-
-        // 1. FIRST, filter the main clan list to find members who are in the image Set.
-        // This creates a pool of 100% valid, current members with screenshots.
         const validSpotlightCandidates = data.rankedPlayers.filter((p: any) => playersWithImagesSet.has(p.id));
-
-        // Create a map of image URLs for easy access
         const imageUrlMap = new Map(playersWithImages.map(p => [p.wom_player_id, p.runeprofile_image_url]));
-
-        // 2. NOW, shuffle the pool of guaranteed-valid candidates.
         const shuffled = validSpotlightCandidates.sort(() => 0.5 - Math.random());
-
-        // 3. And THEN, slice the first 3. This will now always be 3 unless there are fewer than 3 valid candidates.
         const selected = shuffled.slice(0, 3);
-
-        const finalSpotlightPlayers = selected.map((player: any) => {
-          return {
-            id: player.id,
-            imageUrl: imageUrlMap.get(player.id)!, // We know this exists because we filtered
-            displayName: player.displayName,
-            currentRank: player.currentRank,
-          };
-        });
-
+        const finalSpotlightPlayers = selected.map((player: any) => ({
+          id: player.id,
+          imageUrl: imageUrlMap.get(player.id)!,
+          displayName: player.displayName,
+          currentRank: player.currentRank,
+        }));
         setSpotlightPlayers(finalSpotlightPlayers);
       }
-
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
     } finally {
@@ -140,7 +129,9 @@ export default function Home() {
                       if (ach.submission_type === 'bounty') {
                         return (
                           <div key={ach.id} className="group relative w-64 flex-shrink-0 rounded-xl overflow-hidden border border-slate-700/50 shadow-lg transition-all duration-300">
-                            <img src={getOptimizedImageUrl(ach.bounty_image_url)} alt={ach.bounty_name || 'Bounty image'} className="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                             {/* --- REVERTED TO <img> TAG TO FIX RUNTIME ERROR --- */}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={getOptimizedImageUrl(ach.bounty_image_url)} alt={ach.bounty_name || 'Bounty image'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
                             <div className="absolute -left-16 top-9 w-56 transform -rotate-45 bg-red-500 text-center text-white font-bold py-1 shadow-lg">CLAIMED</div>
                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
                             <div className="absolute bottom-0 left-0 right-0 p-4 text-white"><h4 className="font-bold text-base leading-tight">{ach.player_name}</h4><p className="text-sm text-gray-300 truncate">{ach.bounty_name}</p></div>

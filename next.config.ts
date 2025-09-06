@@ -1,14 +1,18 @@
-// eslint.config.mjs
-const next_plugin = require("@next/eslint-plugin-next");
+// next.config.js
 
-module.exports = [
-  {
-    plugins: {
-      next: next_plugin,
-    },
-    rules: {
-      ...next_plugin.configs.recommended.rules,
-      ...next_plugin.configs["core-web-vitals"].rules,
-    },
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // This is the correct configuration for this file.
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'ieciglsbyflhbixlbxmw.supabase.co', // Your Supabase hostname
+        port: '',
+        pathname: '/storage/v1/object/public/**',
+      },
+    ],
   },
-];
+};
+
+module.exports = nextConfig;
