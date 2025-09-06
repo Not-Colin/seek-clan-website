@@ -1,5 +1,5 @@
 // app/api/update-single-spotlight/route.ts
-// **FINAL BUILD FIX: Moved 'ignoreHTTPSErrors' from launch() to goto()**
+// **FINAL BUILD FIX: Removed invalid 'ignoreHTTPSErrors' property**
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -21,7 +21,6 @@ async function generateAndUpdatePlayer(playerId: number, supabaseAdmin: any) {
         if (process.env.NODE_ENV === 'development') {
             browser = await puppeteerDev.launch({ headless: true });
         } else {
-            // --- STEP 1: REMOVED from here ---
             browser = await puppeteer.launch({
                 args: chromium.args,
                 executablePath: await chromium.executablePath(),
@@ -32,11 +31,10 @@ async function generateAndUpdatePlayer(playerId: number, supabaseAdmin: any) {
         const page = await browser.newPage();
         await page.setViewport({ width: 1920, height: 1080 });
 
-        // --- STEP 2: ADDED here ---
+        // --- FIX IS HERE: 'ignoreHTTPSErrors' property removed ---
         await page.goto(profileUrl, {
             waitUntil: 'networkidle0',
-            timeout: 30000,
-            ignoreHTTPSErrors: true
+            timeout: 30000
         });
 
         const raceResult = await Promise.race([

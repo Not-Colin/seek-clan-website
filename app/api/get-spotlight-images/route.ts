@@ -1,5 +1,5 @@
 // app/api/get-spotlight-images/route.ts
-// **FINAL BUILD FIX: Moved 'ignoreHTTPSErrors' from launch() to goto()**
+// **FINAL BUILD FIX: Removed invalid 'ignoreHTTPSErrors' property**
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -44,7 +44,6 @@ export async function POST(request: Request) {
                 if (process.env.NODE_ENV === 'development') {
                     browser = await puppeteerDev.launch({ headless: true });
                 } else {
-                    // --- STEP 1: REMOVED from here ---
                     browser = await puppeteer.launch({
                         args: chromium.args,
                         executablePath: await chromium.executablePath(),
@@ -56,11 +55,10 @@ export async function POST(request: Request) {
                 await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36');
                 await page.setViewport({ width: 1920, height: 1080 });
 
-                // --- STEP 2: ADDED here ---
+                // --- FIX IS HERE: 'ignoreHTTPSErrors' property removed ---
                 await page.goto(profileUrl, {
                     waitUntil: 'networkidle0',
-                    timeout: 30000,
-                    ignoreHTTPSErrors: true
+                    timeout: 30000
                 });
 
                 const raceResult = await Promise.race([
