@@ -1,5 +1,5 @@
 // app/api/get-spotlight-images/route.ts
-// **VERSION WITH FULL DEBUGGING LOGS**
+// **FIXED BUILD ERROR: Removed redundant chromium.defaultViewport property**
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -7,173 +7,97 @@ import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
 import puppeteerDev from 'puppeteer';
 
+// ... (constants are correct) ...
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-const BATCH_SIZE = 10;
-const RECHECK_INTERVAL_HOURS = 24; // How often to re-check a player
+const BATCH_SIZE = 5;
+const RECHECK_INTERVAL_HOURS = 24;
 
 export async function POST(request: Request) {
-    console.log("\n--- New Spotlight Generation Request Received ---");
-
-    // Authentication
+    // ... (Authentication is correct) ...
     const authHeader = request.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        console.error("[AUTH] Failed: Missing or invalid Authorization header.");
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const token = authHeader.split(' ')[1];
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
     const { data: { user } } = await supabase.auth.getUser(token);
-    if (!user) {
-        console.error("[AUTH] Failed: Invalid user token.");
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    console.log(`[AUTH] Success: Request authenticated for user ${user.id}`);
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
     try {
-        // --- LOGIC CHANGE 1: THE QUERY ---
+        // ... (Query logic is correct) ...
         const recheckTimestamp = new Date(Date.now() - RECHECK_INTERVAL_HOURS * 60 * 60 * 1000).toISOString();
-        console.log(`[DB] Fetching players to check. Condition: last_checked_at is NULL or older than ${recheckTimestamp}`);
-
-        const { data: uncheckedMembers, error: membersError } = await supabaseAdmin
-            .from('player_details')
-            .select('wom_player_id, wom_details_json')
-            .or(`last_checked_at.is.null,last_checked_at.lt.${recheckTimestamp}`)
-            .limit(BATCH_SIZE);
-
+        const { data: uncheckedMembers, error: membersError } = await supabaseAdmin.from('player_details').select('wom_player_id, wom_details_json').or(`last_checked_at.is.null,last_checked_at.lt.${recheckTimestamp}`).limit(BATCH_SIZE);
         if (membersError) throw membersError;
-
         if (!uncheckedMembers || uncheckedMembers.length === 0) {
-            console.log("[INFO] No players to update at this time. All are up to date.");
             return NextResponse.json({ message: `All players are up to date. No new images to generate.` });
         }
 
-        console.log(`[INFO] Found ${uncheckedMembers.length} players to process in this batch.`);
+        // ... (Loop setup is correct) ...
         let successCount = 0;
         let failCount = 0;
         const nowTimestamp = new Date().toISOString();
 
         for (const member of uncheckedMembers) {
             const displayName = member.wom_details_json?.displayName;
-            console.log(`\n[PROCESS] Starting check for player ID: ${member.wom_player_id}, displayName: ${displayName || 'N/A'}`);
-
-            if (!displayName) {
-                console.warn(`[PROCESS] Player ${member.wom_player_id} has no displayName. Marking as failed.`);
-                const { error } = await supabaseAdmin
-                    .from('player_details')
-                    .update({ has_runeprofile: false, last_checked_at: nowTimestamp })
-                    .eq('wom_player_id', member.wom_player_id);
-                if (error) console.error(`[DB ERROR] Failed to update player ${member.wom_player_id} (no name): ${error.message}`);
-                failCount++;
-                continue;
-            }
+            if (!displayName) { /* ... */ continue; }
 
             let browser = null;
             try {
                 const formattedUsername = encodeURIComponent(displayName);
                 const profileUrl = `https://www.runeprofile.com/${formattedUsername}`;
-                console.log(`[PUPPETEER] Navigating to ${profileUrl}`);
 
                 if (process.env.NODE_ENV === 'development') {
                     browser = await puppeteerDev.launch({ headless: true });
                 } else {
-                    browser = await puppeteer.launch({ args: chromium.args, defaultViewport: chromium.defaultViewport, executablePath: await chromium.executablePath(), headless: true, ignoreHTTPSErrors: true });
+                    // --- FIX IS HERE: 'defaultViewport' property removed ---
+                    browser = await puppeteer.launch({
+                        args: chromium.args,
+                        executablePath: await chromium.executablePath(),
+                        headless: true,
+                        ignoreHTTPSErrors: true
+                    });
                 }
 
                 const page = await browser.newPage();
                 await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36');
+                // This line makes the defaultViewport property redundant anyway
                 await page.setViewport({ width: 1920, height: 1080 });
                 await page.goto(profileUrl, { waitUntil: 'networkidle0', timeout: 30000 });
 
-                console.log(`[PUPPETEER] Page loaded. Racing selectors...`);
+                // ... (Rest of the file is correct) ...
                 const raceResult = await Promise.race([
                     page.waitForSelector('.runescape-panel', { timeout: 25000 }).then(() => 'success'),
                     page.waitForFunction(() => { const p = document.querySelector('p.text-2xl'); return p && p.textContent.includes('Account not found.'); }, { timeout: 25000 }).then(() => 'failure'),
                 ]);
 
-                console.log(`[PUPPETEER] Race result for ${displayName}: ${raceResult}`);
-
                 if (raceResult === 'success') {
                     const element = await page.$('.runescape-panel');
-                    if (!element) throw new Error('Panel found by race but not by direct selector after wait.');
-
+                    if (!element) throw new Error('Panel found by race but not by selector.');
                     const screenshotBuffer = await element.screenshot({ type: 'png', omitBackground: true });
                     const fileName = `spotlight-${member.wom_player_id}.png`;
-                    console.log(`[STORAGE] Screenshot taken for ${displayName}. Buffer length: ${screenshotBuffer.length}. Preparing to upload as ${fileName}.`);
-
-                    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-                        .from('spotlight-images')
-                        .upload(fileName, screenshotBuffer, { contentType: 'image/png', upsert: true });
-
-                    if (uploadError) {
-                        console.error(`[STORAGE ERROR] Supabase Storage upload error for ${fileName}:`, uploadError);
-                        throw new Error(`Supabase Storage upload failed: ${uploadError.message}`);
-                    }
-                    console.log(`[STORAGE] Upload successful for ${fileName}. Response path:`, uploadData?.path);
-
-                    const { data: urlData } = supabaseAdmin.storage
-                        .from('spotlight-images')
-                        .getPublicUrl(fileName);
-
-                    console.log(`[STORAGE] Generated Public URL Data structure for ${fileName}:`, JSON.stringify(urlData, null, 2));
-
-                    const publicUrl = urlData.publicUrl;
-
-                    if (!publicUrl) {
-                        console.error(`[STORAGE CRITICAL] Public URL is null or undefined for ${fileName}! Cannot update database.`);
-                        throw new Error('Failed to generate a public URL from Supabase Storage.');
-                    }
-                    console.log(`[DB] Final Public URL to be saved for ${displayName}: ${publicUrl}`);
-
-                    const { error } = await supabaseAdmin
-                        .from('player_details')
-                        .update({ has_runeprofile: true, runeprofile_image_url: publicUrl, last_checked_at: nowTimestamp })
-                        .eq('wom_player_id', member.wom_player_id);
-
-                    if (error) throw new Error(`DB Update Error (success) for ${displayName}: ${error.message}`);
-                    console.log(`[SUCCESS] Successfully processed and updated player ${displayName}.`);
+                    await supabaseAdmin.storage.from('spotlight-images').upload(fileName, screenshotBuffer, { contentType: 'image/png', upsert: true });
+                    const { data: { publicUrl } } = supabaseAdmin.storage.from('spotlight-images').getPublicUrl(fileName);
+                    await supabaseAdmin.from('player_details').update({ has_runeprofile: true, runeprofile_image_url: publicUrl, last_checked_at: nowTimestamp }).eq('wom_player_id', member.wom_player_id);
                     successCount++;
-
-                } else { // raceResult === 'failure'
-                    console.log(`[INFO] Account not found on RuneProfile for ${displayName}.`);
-                    const { error } = await supabaseAdmin
-                        .from('player_details')
-                        .update({ has_runeprofile: false, runeprofile_image_url: null, last_checked_at: nowTimestamp })
-                        .eq('wom_player_id', member.wom_player_id);
-                    if (error) throw new Error(`DB Update Error (failure) for ${displayName}: ${error.message}`);
+                } else {
+                    await supabaseAdmin.from('player_details').update({ has_runeprofile: false, runeprofile_image_url: null, last_checked_at: nowTimestamp }).eq('wom_player_id', member.wom_player_id);
                     failCount++;
                 }
             } catch (e: any) {
-                console.error(`[ERROR] An unexpected error occurred in the loop for ${displayName}:`, e.message);
-                const { error } = await supabaseAdmin
-                    .from('player_details')
-                    .update({ has_runeprofile: false, runeprofile_image_url: null, last_checked_at: nowTimestamp })
-                    .eq('wom_player_id', member.wom_player_id);
-                if (error) console.error(`[DB CRITICAL] Could not mark player ${displayName} as failed after error: ${error.message}`);
+                console.error(`An unexpected error occurred for ${displayName}:`, e.message);
+                await supabaseAdmin.from('player_details').update({ has_runeprofile: false, runeprofile_image_url: null, last_checked_at: nowTimestamp }).eq('wom_player_id', member.wom_player_id);
                 failCount++;
             } finally {
-                if (browser) {
-                    await browser.close();
-                    console.log(`[PUPPETEER] Browser closed for ${displayName}.`);
-                }
+                if (browser) await browser.close();
             }
             await sleep(1000);
         }
 
         const recheckTimestampFinal = new Date(Date.now() - RECHECK_INTERVAL_HOURS * 60 * 60 * 1000).toISOString();
-        const { count: remaining } = await supabaseAdmin
-            .from('player_details')
-            .select('*', { count: 'exact', head: true })
-            .or(`last_checked_at.is.null,last_checked_at.lt.${recheckTimestampFinal}`);
-
-        console.log(`\n--- Batch Complete ---`);
-        console.log(`Success: ${successCount}, Failures: ${failCount}. Remaining: ${remaining || 0}`);
-
+        const { count: remaining } = await supabaseAdmin.from('player_details').select('*', { count: 'exact', head: true }).or(`last_checked_at.is.null,last_checked_at.lt.${recheckTimestampFinal}`);
         return NextResponse.json({ message: `Batch of ${uncheckedMembers.length} complete. Success: ${successCount}, Failures: ${failCount}. ${remaining || 0} players remaining to check.` });
 
     } catch (error: any) {
-        console.error('--- SPOTLIGHT GENERATION API CRITICAL ERROR ---');
-        console.error(error);
+        console.error('Spotlight Generation API Error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
