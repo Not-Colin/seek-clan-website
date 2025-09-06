@@ -1,4 +1,4 @@
-// app/submit/page.tsx - with debugging console.log
+// app/submit/page.tsx - FINAL VERSION
 
 'use client';
 
@@ -29,7 +29,7 @@ function SubmitFormContent() {
   // Form State
   const [submissionType, setSubmissionType] = useState('bounty');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('');
-  const [selectedBounty, setSelectedBounty] = useState('');
+  const [selectedBountyId, setSelectedBountyId] = useState<string>('');
   const [pbCategory, setPbCategory] = useState(pbCategories[0]);
   const [pbTime, setPbTime] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -57,11 +57,19 @@ function SubmitFormContent() {
       if (bountyError) console.error('Error fetching bounties:', bountyError);
       else if (bountyData) {
         setBounties(bountyData as Bounty[]);
-        const bountyFromUrl = searchParams.get('bounty');
-        if (bountyFromUrl && bountyData.some(b => b.name === decodeURIComponent(bountyFromUrl))) {
-          setSelectedBounty(decodeURIComponent(bountyFromUrl));
-        } else if (bountyData.length > 0) {
-          setSelectedBounty(bountyData[0].name);
+        // Logic to pre-select bounty from URL
+        const bountyIdFromUrl = searchParams.get('bountyId');
+        if (bountyIdFromUrl && bountyData.some(b => b.id.toString() === bountyIdFromUrl)) {
+          setSelectedBountyId(bountyIdFromUrl);
+        } else {
+          // Fallback logic for old links or no selection
+          const bountyNameFromUrl = searchParams.get('bounty');
+          if (bountyNameFromUrl) {
+            const matchedBounty = bountyData.find(b => b.name === decodeURIComponent(bountyNameFromUrl));
+            if (matchedBounty) setSelectedBountyId(matchedBounty.id.toString());
+          } else if (bountyData.length > 0) {
+            setSelectedBountyId(bountyData[0].id.toString());
+          }
         }
       }
 
@@ -114,31 +122,28 @@ function SubmitFormContent() {
       const selectedPlayer = clanMembers.find(m => m.id.toString() === selectedPlayerId);
       if (!selectedPlayer) throw new Error("Invalid player selected. Please refresh the page.");
 
-      const womPlayerId = selectedPlayer.id;
-      const playerName = selectedPlayer.displayName;
-
       const fileExt = selectedFile.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
       const { error: uploadError } = await supabase.storage.from('proof-images').upload(fileName, selectedFile);
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from('proof-images').getPublicUrl(fileName);
 
-      // --- START DEBUGGING BLOCK ---
+      const selectedBountyObject = submissionType === 'bounty' ? bounties.find(b => b.id.toString() === selectedBountyId) : null;
+
       const rpcPayload = {
-          player_name_in: playerName,
-          wom_player_id_in: womPlayerId,
+          player_name_in: selectedPlayer.displayName,
+          wom_player_id_in: selectedPlayer.id,
           submission_type_in: submissionType,
           proof_image_url_in: urlData.publicUrl,
-          bounty_name_in: submissionType === 'bounty' ? selectedBounty : null,
-          bounty_tier_in: submissionType === 'bounty' ? bounties.find(b => b.name === selectedBounty)?.tier : null,
+          bounty_name_in: selectedBountyObject?.name || null,
+          bounty_tier_in: selectedBountyObject?.tier || null,
+          bounty_id_in: selectedBountyObject?.id || null,
           pb_category_in: submissionType === 'personal_best' ? pbCategory : null,
           pb_time_in: submissionType === 'personal_best' ? pbTime : null,
           password_in: userEnteredPassword
       };
 
-      console.log("--- Sending this payload to Supabase RPC ---");
-      console.log(JSON.stringify(rpcPayload, null, 2));
-      // --- END DEBUGGING BLOCK ---
+      console.log("--- Sending this payload to Supabase RPC ---", JSON.stringify(rpcPayload, null, 2));
 
       const { error: rpcError } = await supabase.rpc('submit_achievement', {
         payload: rpcPayload
@@ -183,7 +188,7 @@ function SubmitFormContent() {
               </div>
               <div className="flex space-x-4"><label className="flex items-center"><input type="radio" value="bounty" checked={submissionType === 'bounty'} onChange={() => setSubmissionType('bounty')} className="form-radio h-4 w-4 text-orange-600 bg-slate-700 border-slate-600 focus:ring-orange-500" /><span className="ml-2 text-gray-300">Bounty</span></label><label className="flex items-center"><input type="radio" value="personal_best" checked={submissionType === 'personal_best'} onChange={() => setSubmissionType('personal_best')} className="form-radio h-4 w-4 text-orange-600 bg-slate-700 border-slate-600 focus:ring-orange-500" /><span className="ml-2 text-gray-300">Personal Best</span></label></div>
               {submissionType === 'bounty' ? (
-                <div><label htmlFor="bounty" className="block text-sm font-medium text-gray-300 mb-2">Select Bounty</label><select id="bounty" value={selectedBounty} onChange={(e) => setSelectedBounty(e.target.value)} className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500">{bounties.length > 0 ? bounties.map(b => <option key={b.id} value={b.name}>{b.name}</option>) : <option>Loading bounties...</option>}</select></div>
+                <div><label htmlFor="bounty" className="block text-sm font-medium text-gray-300 mb-2">Select Bounty</label><select id="bounty" value={selectedBountyId} onChange={(e) => setSelectedBountyId(e.target.value)} className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500">{bounties.length > 0 ? bounties.map(b => <option key={b.id} value={b.id}>{b.name}</option>) : <option>Loading bounties...</option>}</select></div>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
                   <div><label htmlFor="pbCategory" className="block text-sm font-medium text-gray-300 mb-2">Category</label><select id="pbCategory" value={pbCategory} onChange={(e) => setPbCategory(e.target.value)} className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500">{pbCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</select></div>

@@ -1,8 +1,8 @@
-// app/bounties/page.tsx - WITH IMG WARNING SUPPRESSION
+// app/bounties/page.tsx - FINAL VERSION
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react'; // <-- ADD useCallback HERE
+import { useState, useEffect, useCallback } from 'react';
 import Header from '@/components/Header';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
@@ -18,7 +18,6 @@ export default function BountiesPage() {
   const [activeBounties, setActiveBounties] = useState<Bounty[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Wrap fetchBounties with useCallback
   const fetchBounties = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -33,11 +32,11 @@ export default function BountiesPage() {
       setActiveBounties(data as Bounty[]);
     }
     setLoading(false);
-  }, []); // Empty dependency array because fetchBounties doesn't depend on any external changing state/props
+  }, []);
 
   useEffect(() => {
     fetchBounties();
-  }, [fetchBounties]); // Now fetchBounties is a stable reference, so the useEffect won't run unnecessarily
+  }, [fetchBounties]);
 
   const tierDetails = {
     high: { reward: '10M GP', color: 'border-red-500/50 bg-red-500/10' },
@@ -64,7 +63,7 @@ export default function BountiesPage() {
               {activeBounties.map((bounty) => (
                 <Link
                   key={bounty.id}
-                  href={`/submit?bounty=${encodeURIComponent(bounty.name)}`}
+                  href={`/submit?bountyId=${bounty.id}`}
                   className="hover:scale-105 transition-transform duration-200"
                 >
                   <div className={`rounded-xl border ${tierDetails[bounty.tier].color} overflow-hidden flex flex-col h-full`}>
@@ -96,7 +95,7 @@ export default function BountiesPage() {
                 <div className="bg-slate-800/30 p-4 rounded-lg">
                   <h3 className="font-bold text-orange-400 mb-2">Bounty Tiers</h3>
                   <ul className="space-y-2 text-sm">
-                    <li><strong className="text-green-400">Low:</strong> Mid-game/skiller content. GP prize for Emerald rank & below.</li>
+                    <li><strong className="text-green-400">Low:</strong> Mid-game/skiller content. Only for Emerald rank & below.</li>
                     <li><strong className="text-yellow-400">Medium:</strong> All ranks eligible.</li>
                     <li><strong className="text-red-400">High:</strong> Significant effort/luck. All ranks eligible.</li>
                   </ul>
