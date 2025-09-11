@@ -1,4 +1,4 @@
-// app/api/update-single-spotlight/route.ts - With DUAL Cache Busting
+// app/api/update-single-spotlight/route.ts - With FINAL URL Cache Busting
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -29,8 +29,9 @@ async function generateAndUpdatePlayer(playerId: number, supabaseAdmin: any) {
 
         const page = await browser.newPage();
 
-        // --- FIX #1: Disable the browser's cache for this page load ---
-        await page.setCacheEnabled(false);
+        const client = await page.target().createCDPSession();
+        await client.send('Network.clearBrowserCookies');
+        await client.send('Network.clearBrowserCache');
 
         await page.setViewport({ width: 1920, height: 1080 });
         await page.goto(profileUrl, { waitUntil: 'networkidle0', timeout: 30000 });
@@ -48,9 +49,16 @@ async function generateAndUpdatePlayer(playerId: number, supabaseAdmin: any) {
             const screenshotBuffer = await element.screenshot({ type: 'png', omitBackground: true });
             const fileName = `spotlight-${player.wom_player_id}.png`;
 
-            await supabaseAdmin.storage.from('spotlight-images').upload(fileName, screenshotBuffer, { contentType: 'image/png', upsert: true });
+            await supabaseAdmin.storage.from('spotlight-images').remove([fileName]);
+            const { error: uploadError } = await supabaseAdmin.storage
+                .from('spotlight-images')
+                .upload(fileName, screenshotBuffer, {
+                    contentType: 'image/png',
+                    cacheControl: 'no-cache'
+                });
+            if (uploadError) throw uploadError;
 
-            // --- FIX #2: Add timestamp to the URL to bust CDN cache ---
+            // --- THE FINAL FIX: Re-add the timestamp to the URL saved in the database ---
             const { data: { publicUrl } } = supabaseAdmin.storage.from('spotlight-images').getPublicUrl(fileName);
             const finalUrl = `${publicUrl}?t=${new Date().getTime()}`;
 
