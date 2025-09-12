@@ -1,5 +1,3 @@
-// app/submit/page.tsx - FINAL VERSION
-
 'use client';
 
 import { useState, useEffect, ChangeEvent, FormEvent, Suspense } from 'react';
@@ -25,22 +23,16 @@ const pbCategories = [
 
 function SubmitFormContent() {
   const searchParams = useSearchParams();
-
-  // Form State
   const [submissionType, setSubmissionType] = useState('bounty');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('');
   const [selectedBountyId, setSelectedBountyId] = useState<string>('');
   const [pbCategory, setPbCategory] = useState(pbCategories[0]);
   const [pbTime, setPbTime] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-
-  // Data and UI State
   const [clanMembers, setClanMembers] = useState<ClanMember[]>([]);
   const [bounties, setBounties] = useState<Bounty[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitStatus, setSubmitStatus] = useState({ message: '', type: '' });
-
-  // Password State
   const [isPasswordRequired, setIsPasswordRequired] = useState(false);
   const [userEnteredPassword, setUserEnteredPassword] = useState('');
 
@@ -52,17 +44,14 @@ function SubmitFormContent() {
         fetch('/api/get-cached-clan-data')
       ]);
 
-      // Process Bounties
       const { data: bountyData, error: bountyError } = bountyRes;
       if (bountyError) console.error('Error fetching bounties:', bountyError);
       else if (bountyData) {
         setBounties(bountyData as Bounty[]);
-        // Logic to pre-select bounty from URL
         const bountyIdFromUrl = searchParams.get('bountyId');
         if (bountyIdFromUrl && bountyData.some(b => b.id.toString() === bountyIdFromUrl)) {
           setSelectedBountyId(bountyIdFromUrl);
         } else {
-          // Fallback logic for old links or no selection
           const bountyNameFromUrl = searchParams.get('bounty');
           if (bountyNameFromUrl) {
             const matchedBounty = bountyData.find(b => b.name === decodeURIComponent(bountyNameFromUrl));
@@ -73,19 +62,16 @@ function SubmitFormContent() {
         }
       }
 
-      // Process Settings
       const { data: settingsData, error: settingsError } = settingsRes;
       if (settingsError) console.error('Error fetching settings:', settingsError);
       else if (settingsData) setIsPasswordRequired(settingsData.is_password_required);
 
-      // Process Clan Roster
       if (clanDataRes.ok) {
         const clanData = await clanDataRes.json();
         const members = clanData.rankedPlayers
           .map((p: any) => ({ displayName: p.displayName, id: p.id }))
           .filter((p: ClanMember) => p.id)
           .sort((a: ClanMember, b: ClanMember) => a.displayName.localeCompare(b.displayName));
-
         setClanMembers(members);
         if (members.length > 0) {
           setSelectedPlayerId(members[0].id.toString());
@@ -143,13 +129,24 @@ function SubmitFormContent() {
           password_in: userEnteredPassword
       };
 
-      console.log("--- Sending this payload to Supabase RPC ---", JSON.stringify(rpcPayload, null, 2));
-
       const { error: rpcError } = await supabase.rpc('submit_achievement', {
         payload: rpcPayload
       });
 
       if (rpcError) throw rpcError;
+
+      // --- THE FIX IS HERE: Call the new, dedicated submission notification route ---
+      fetch('/api/notify-submission', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              playerName: selectedPlayer.displayName,
+              submissionType: submissionType,
+              bountyName: selectedBountyObject?.name || null,
+              pbCategory: submissionType === 'personal_best' ? pbCategory : null,
+              proofImageUrl: urlData.publicUrl
+          })
+      }).catch(err => console.error("Discord notification failed to send:", err));
 
       setSubmitStatus({ message: 'Submission successful! Awaiting admin approval.', type: 'success' });
       const form = e.target as HTMLFormElement;

@@ -1,13 +1,11 @@
 'use client';
 
-import Header from '../components/Header'; // This will be removed, but keeping it in the provided code block for context. In the final code, it's gone.
+// Header is now rendered by each page, not the global layout, so we keep the import.
+import Header from '../components/Header';
 import DataCard from '../components/DataCard';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
-
-// NOTE: Since your layout.tsx handles Header and Footer, they are not needed here.
-// I will remove the <Header /> import and component call in the final code block.
 
 interface SpotlightPlayer { id: number; displayName: string; currentRank: string; imageUrl: string; }
 interface Post { id: number; title: string; slug: string; excerpt: string; category: string; published_at: string; status: 'draft' | 'published' | 'featured'; }
@@ -132,10 +130,11 @@ export default function Home() {
         className="fixed inset-0 bg-cover bg-center -z-10"
         style={{ backgroundImage: "url('/images/dashboard-bg.jpg')" }}
       />
-      <div className="fixed inset-0 bg-gradient-to-br from-slate-900/15 via-slate-800/15 to-slate-900/15  -z-10" />
+      <div className="fixed inset-0 bg-gradient-to-br from-slate-900/15 via-slate-800/15 to-slate-900/15 backdrop-blur-sm -z-10" />
 
-      {/* The main content now lives here, on top of the background layers */}
-      <div className="relative z-0 px-6 py-8">
+      <Header />
+
+      <main className="relative z-0 px-6 py-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-8 text-center"><h1 className="text-4xl font-bold text-white mb-2">Welcome to <span className="text-orange-400" style={{ fontFamily: 'var(--font-pacifico)' }}>Seek</span></h1><p className="text-gray-400 text-lg">Your Oldschool RuneScape Clan Hub</p></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
@@ -200,7 +199,7 @@ export default function Home() {
             )}
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

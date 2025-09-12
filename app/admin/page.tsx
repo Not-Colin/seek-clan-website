@@ -43,6 +43,8 @@ export default function AdminPage() {
     const [currentPost, setCurrentPost] = useState<Post>({ title: '', slug: '', content: '', excerpt: '', category: 'News', status: 'draft' });
     const [isEditingPost, setIsEditingPost] = useState(false);
     const [postStatus, setPostStatus] = useState('');
+    const [isSyncingWom, setIsSyncingWom] = useState(false);
+    const [womSyncStatus, setWomSyncStatus] = useState('');
 
     const fetchBounties = useCallback(async () => { const { data, error } = await supabase.from('bounties').select('*').order('created_at', { ascending: false }); if (error) console.error('Error fetching bounties:', error); else setBounties(data || []); }, []);
     const fetchPendingSubmissions = useCallback(async () => { const { data, error } = await supabase.from('submissions').select('*, bounties(name)').eq('status', 'pending').order('created_at', { ascending: true }); if (error) console.error('Error fetching pending submissions:', error); else setPendingSubmissions(data || []); }, []);
@@ -75,67 +77,13 @@ export default function AdminPage() {
     const handleTradeProofRemove = useCallback(async (submission: Submission) => { if (!submission.trade_proof_url) return; if (!window.confirm("Are you sure?")) return; setIsLoggingTrade(true); setSelectedSubmissionId(submission.id); try { const fileName = submission.trade_proof_url.split('/').pop(); if (fileName) await supabase.storage.from('trade-proofs').remove([fileName]); await supabase.from('submissions').update({ trade_proof_url: null }).eq('id', submission.id); alert("Trade proof removed successfully."); await fetchApprovedBounties(); } catch (error: any) { alert(`Error removing trade proof: ${error.message}`); } finally { setIsLoggingTrade(false); setSelectedSubmissionId(null); } }, [fetchApprovedBounties]);
     const handleUpdateSettings = useCallback(async (e: FormEvent) => { e.preventDefault(); setSettingsStatus('Saving...'); const { error } = await supabase.from('settings').update({ is_password_required: isPasswordRequired, submission_password: submissionPassword || null }).eq('id', 1); if (error) setSettingsStatus(`Error: ${error.message}`); else { setSettingsStatus('Settings saved!'); setTimeout(() => setSettingsStatus(''), 2000); } }, [isPasswordRequired, submissionPassword]);
     const handleLogout = useCallback(async () => { await supabase.auth.signOut(); setUser(null); router.push('/'); }, [router]);
-    const handleRefreshData = useCallback(async () => { setIsRefreshing(true); setRefreshStatus('Refreshing, please wait...'); try { const { data: { session }, error: sessionError } = await supabase.auth.refreshSession(); if (sessionError || !session) throw new Error("Your session has expired. Please log in again."); const response = await fetch('/api/refresh-clan-data', { method: 'POST', headers: { 'Authorization': `Bearer ${session.access_token}` } }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'An unknown error occurred.'); setRefreshStatus(result.message); } catch (error: any) { setRefreshStatus(`Error: ${error.message}`); if (error.message.includes("session has expired")) await handleLogout(); } finally { setIsRefreshing(false); setTimeout(() => setRefreshStatus(''), 5000); } }, [handleLogout]);
+    const handleCalculateRanks = useCallback(async () => { setIsRefreshing(true); setRefreshStatus('Calculating ranks...'); try { const { data: { session }, error: sessionError } = await supabase.auth.refreshSession(); if (sessionError || !session) throw new Error("Your session has expired. Please log in again."); const response = await fetch('/api/refresh-clan-data', { method: 'POST', headers: { 'Authorization': `Bearer ${session.access_token}` } }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'An unknown error occurred.'); setRefreshStatus(result.message); } catch (error: any) { setRefreshStatus(`Error: ${error.message}`); if (error.message.includes("session has expired")) await handleLogout(); } finally { setIsRefreshing(false); setTimeout(() => setRefreshStatus(''), 5000); } }, [handleLogout]);
+    const handleWomSync = useCallback(async () => { setIsSyncingWom(true); setWomSyncStatus('Starting sync with Wise Old Man. This will take several minutes...'); try { const { data: { session }, error: sessionError } = await supabase.auth.refreshSession(); if (sessionError || !session) throw new Error("Your session has expired. Please log in again."); const response = await fetch('/api/sync-wom-data', { method: 'POST', headers: { 'Authorization': `Bearer ${session.access_token}` } }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'An unknown error occurred.'); setWomSyncStatus(result.message); } catch (error: any) { setWomSyncStatus(`Error: ${error.message}`); if (error.message.includes("session has expired")) await handleLogout(); } finally { setIsSyncingWom(false); setTimeout(() => setWomSyncStatus(''), 10000); } }, [handleLogout]);
     const handleGenerateSpotlight = useCallback(async () => { setIsGeneratingSpotlight(true); setSpotlightStatus('Processing a batch, this may take a moment...'); try { const { data: { session }, error: sessionError } = await supabase.auth.refreshSession(); if (sessionError || !session) throw new Error("Your session has expired. Please log in again."); const response = await fetch('/api/get-spotlight-images', { method: 'POST', headers: { 'Authorization': `Bearer ${session.access_token}` } }); if (!response.ok) { try { const result = await response.json(); throw new Error(result.error || 'An unknown error occurred.'); } catch (e) { throw new Error(`Server returned a non-JSON response. It may have timed out. Status: ${response.status}`); } } const result = await response.json(); setSpotlightStatus(result.message); } catch (error: any) { setSpotlightStatus(`Error: ${error.message}`); if (error.message.includes("session has expired")) await handleLogout(); } finally { setIsGeneratingSpotlight(false); setTimeout(() => setSpotlightStatus(''), 15000); } }, [handleLogout]);
     const handleSingleSpotlightUpdate = useCallback(async () => { if (!selectedPlayerId) { setSingleUpdateStatus('Please select a player.'); return; } setIsUpdatingSingle(true); setSingleUpdateStatus(`Updating ${allClanMembers.find(p => p.id.toString() === selectedPlayerId)?.displayName}...`); try { const { data: { session }, error: sessionError } = await supabase.auth.refreshSession(); if (sessionError || !session) throw new Error("Session expired. Please log in again."); const response = await fetch('/api/update-single-spotlight', { method: 'POST', headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ wom_player_id: parseInt(selectedPlayerId, 10) }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'An unknown error occurred.'); setSingleUpdateStatus(result.message); } catch (error: any) { setSingleUpdateStatus(`Error: ${error.message}`); if (error.message.includes("session has expired")) await handleLogout(); } finally { setIsUpdatingSingle(false); setTimeout(() => setSingleUpdateStatus(''), 8000); } }, [selectedPlayerId, allClanMembers, handleLogout]);
     const generateSlug = (title: string) => title.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
-
-    const handlePostSubmit = useCallback(async (e: FormEvent) => {
-        e.preventDefault();
-        setPostStatus('Saving...');
-        const slug = generateSlug(currentPost.title);
-        const postToSave = { ...currentPost, slug, status: isEditingPost ? currentPost.status : 'draft' };
-        let error;
-        if (isEditingPost) {
-            ({ error } = await supabase.from('posts').update(postToSave).eq('id', postToSave.id));
-        } else {
-            ({ error } = await supabase.from('posts').insert(postToSave));
-        }
-        if (error) { setPostStatus(`Error: ${error.message}`); }
-        else { setPostStatus('Post saved successfully!'); setCurrentPost({ title: '', slug: '', content: '', excerpt: '', category: 'News', status: 'draft' }); setIsEditingPost(false); await fetchPosts(); setTimeout(() => setPostStatus(''), 3000); }
-    }, [currentPost, isEditingPost, fetchPosts]);
-
-    const handleSetStatus = useCallback(async (post: Post, newStatus: 'featured' | 'published' | 'draft') => {
-        if (newStatus === 'featured') {
-            const { error: unfeatureError } = await supabase.from('posts').update({ status: 'published' }).eq('category', post.category).eq('status', 'featured');
-            if (unfeatureError) { alert(`Error un-featuring old post: ${unfeatureError.message}`); return; }
-        }
-        const { error } = await supabase.from('posts').update({ status: newStatus, published_at: newStatus !== 'draft' && !post.published_at ? new Date().toISOString() : post.published_at }).eq('id', post.id);
-
-        if (error) {
-            alert(`Error updating post status: ${error.message}`);
-        } else {
-            await fetchPosts();
-            if (newStatus === 'featured') {
-                try {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (!session) throw new Error("No active session to send notification.");
-
-                    const response = await fetch('/api/notify-discord', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${session.access_token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            title: post.title,
-                            excerpt: post.excerpt,
-                            slug: post.slug,
-                            category: post.category
-                        })
-                    });
-
-                    if (!response.ok) {
-                        const result = await response.json();
-                        throw new Error(result.error || "Unknown error sending notification.");
-                    }
-                } catch (notifyError: any) {
-                    alert(`Post was featured, but failed to send Discord notification: ${notifyError.message}`);
-                }
-            }
-        }
-    }, [fetchPosts]);
-
+    const handlePostSubmit = useCallback(async (e: FormEvent) => { e.preventDefault(); setPostStatus('Saving...'); const slug = generateSlug(currentPost.title); const postToSave = { ...currentPost, slug, status: isEditingPost ? currentPost.status : 'draft' }; let error; if (isEditingPost) { ({ error } = await supabase.from('posts').update(postToSave).eq('id', postToSave.id)); } else { ({ error } = await supabase.from('posts').insert(postToSave)); } if (error) { setPostStatus(`Error: ${error.message}`); } else { setPostStatus('Post saved successfully!'); setCurrentPost({ title: '', slug: '', content: '', excerpt: '', category: 'News', status: 'draft' }); setIsEditingPost(false); await fetchPosts(); setTimeout(() => setPostStatus(''), 3000); } }, [currentPost, isEditingPost, fetchPosts]);
+    const handleSetStatus = useCallback(async (post: Post, newStatus: 'featured' | 'published' | 'draft') => { if (newStatus === 'featured') { const { error: unfeatureError } = await supabase.from('posts').update({ status: 'published' }).eq('category', post.category).eq('status', 'featured'); if (unfeatureError) { alert(`Error un-featuring old post: ${unfeatureError.message}`); return; } } const { error } = await supabase.from('posts').update({ status: newStatus, published_at: newStatus !== 'draft' && !post.published_at ? new Date().toISOString() : post.published_at }).eq('id', post.id); if (error) { alert(`Error updating post status: ${error.message}`); } else { await fetchPosts(); if (newStatus === 'featured') { try { const { data: { session } } = await supabase.auth.getSession(); if (!session) throw new Error("No active session to send notification."); const response = await fetch('/api/notify-discord', { method: 'POST', headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ title: post.title, excerpt: post.excerpt, slug: post.slug, category: post.category }) }); if (!response.ok) { const result = await response.json(); throw new Error(result.error || "Unknown error sending notification."); } } catch (notifyError: any) { alert(`Post was featured, but failed to send Discord notification: ${notifyError.message}`); } } } }, [fetchPosts]);
     const handlePostDelete = async (postId: number) => { if (window.confirm('Are you sure you want to delete this post?')) { const { error } = await supabase.from('posts').delete().eq('id', postId); if (error) alert(`Error deleting post: ${error.message}`); else await fetchPosts(); } };
 
     if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Loading...</div>;
@@ -191,7 +139,19 @@ export default function AdminPage() {
                                 {isPasswordRequired && (<div><label htmlFor="submissionPassword" className="block text-sm font-medium text-gray-300 mb-2">Submission Password</label><input type="text" id="submissionPassword" value={submissionPassword} onChange={(e) => setSubmissionPassword(e.target.value)} placeholder="Enter the password for members" className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500" /><p className="text-xs text-gray-500 mt-1">Leave blank to remove the password.</p></div>)}
                                 <button type="submit" className="w-full bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-4 rounded-lg">Save Settings</button>
                                 {settingsStatus && <p className="text-center text-sm text-green-400">{settingsStatus}</p>}
-                                <div className="pt-6 mt-6 border-t border-slate-700"><h3 className="text-lg font-semibold text-white mb-4">Manual Data Refresh</h3><p className="text-sm text-gray-400 mb-4">Syncs all player ranks, stats, and submissions from Wise Old Man.</p><button type="button" onClick={handleRefreshData} disabled={isRefreshing} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg disabled:bg-slate-600 disabled:cursor-wait">{isRefreshing ? 'Refreshing Data...' : 'Refresh Clan Data Now'}</button>{refreshStatus && (<p className="text-center text-sm mt-4 text-gray-300">{refreshStatus}</p>)}</div>
+                                <div className="pt-6 mt-6 border-t border-slate-700">
+                                    <h3 className="text-lg font-semibold text-white mb-4">Clan Data Management</h3>
+                                    <div className="mb-6">
+                                        <p className="text-sm text-gray-400 mb-2"><strong>Step 1 (Slow):</strong> Syncs all player stats from Wise Old Man. Run this once a day or when new members join. This can take several minutes.</p>
+                                        <button type="button" onClick={handleWomSync} disabled={isSyncingWom} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg disabled:bg-slate-600 disabled:cursor-wait">{isSyncingWom ? 'Syncing WOM Data...' : 'Sync with Wise Old Man'}</button>
+                                        {womSyncStatus && (<p className="text-center text-sm mt-4 text-gray-300">{womSyncStatus}</p>)}
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-400 mb-2"><strong>Step 2 (Fast):</strong> Recalculates all clan ranks based on the latest synced data and bounty submissions.</p>
+                                        <button type="button" onClick={handleCalculateRanks} disabled={isRefreshing} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg disabled:bg-slate-600 disabled:cursor-wait">{isRefreshing ? 'Calculating Ranks...' : 'Calculate Ranks Now'}</button>
+                                        {refreshStatus && (<p className="text-center text-sm mt-4 text-gray-300">{refreshStatus}</p>)}
+                                    </div>
+                                </div>
                                 <div className="pt-6 mt-6 border-t border-slate-700">
                                     <h3 className="text-lg font-semibold text-white mb-4">Player Spotlight Generation</h3>
                                     <div className="space-y-4">

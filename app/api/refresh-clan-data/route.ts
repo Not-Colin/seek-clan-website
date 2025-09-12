@@ -1,41 +1,69 @@
-// app/api/refresh-clan-data/route.ts - Cleaned up version
+// app/api/refresh-clan-data/route.ts - CORRECTED to filter by current clan members
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
-import { WOMClient } from '@wise-old-man/utils';
 
-// ... (All your interfaces and constants like RANK_DEFINITIONS remain the same)
 interface PlayerBountyCounts { low: number; medium: number; high: number; total: number; }
 interface ClanMemberRanked { id: number; username: string; displayName: string; ehb: number; ehp: number; accountType: string; ttm: number; bounties: PlayerBountyCounts; currentRank: string; rankOrder: number; requirementsMet: string[]; nextRankRequirements: string[]; }
 const RANK_DEFINITIONS = [ { name: "Infernal", order: 10, criteria: [ { type: "low_bounties", min: 12 }, { type: "high_bounties", min: 3 }, { type: "ehb", min: 1000 }, ]}, { name: "Zenyte", order: 9, criteria: [ { type: "low_bounties", min: 9 }, { type: "high_bounties", min: 3 }, { type: "ehb", min: 1000 }, ]}, { name: "Onyx", order: 8, criteria: [ { type: "low_bounties", min: 7 }, { type: "high_bounties", min: 2 }, { type: "ehb", min: 750 }, ]}, { name: "Dragonstone", order: 7, criteria: [ { type: "low_bounties", min: 5 }, { type: "high_bounties", min: 1 }, { type: "ehb", min: 500 }, ]}, { name: "Diamond", order: 6, criteria: [ { type: "low_bounties", min: 4 }, { type: "medium_bounties", min: 2 }, { type: "ehb", min: 250 }, ]}, { name: "Ruby", order: 5, criteria: [ { type: "low_bounties", min: 3 }, { type: "medium_bounties", min: 1 }, { type: "ehb", min: 100 }, ]}, { name: "Emerald", order: 4, criteria: [ { type: "low_bounties", min: 2 }, { type: "ehb", min: 50 }, ]}, { name: "Sapphire", order: 3, criteria: [ { type: "low_bounties", min: 1 }, { type: "ehb", min: 25 }, ]}, { name: "Opal", order: 2, criteria: [ { type: "ehb", min: 10 }, ]}, { name: "Backpack", order: 1, criteria: [] }, ];
 const SPECIAL_ROLES = new Set(['owner', 'deputy_owner', 'bandosian', 'minion']);
 const ROLE_DISPLAY_NAMES: { [key: string]: string } = { owner: 'Clan Owner', deputy_owner: 'Deputy Owner', bandosian: 'Administrator', minion: 'Alternate Account' };
 const ROLE_SORT_ORDER: { [key: string]: number } = { minion: -1, bandosian: -2, owner: -3, deputy_owner: -3 };
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-function getPlayerRank(playerStats: { ehb: number; }, bountyCounts: PlayerBountyCounts): { rank: string; order: number; next: string[] } { let currentRank = "Backpack"; let currentOrder = 1; let nextRankRequirements: string[] = []; for (const rankDef of RANK_DEFINITIONS) { if (!rankDef.criteria) continue; const meetsAll = rankDef.criteria.every(criterion => { switch(criterion.type) { case "low_bounties": return bountyCounts.total >= criterion.min; case "medium_bounties": return (bountyCounts.medium + bountyCounts.high) >= criterion.min; case "high_bounties": return bountyCounts.high >= criterion.min; case "ehb": return playerStats.ehb >= criterion.min; default: return false; } }); if (meetsAll) { currentRank = rankDef.name; currentOrder = rankDef.order; break; } } const nextRankDef = RANK_DEFINITIONS.find(r => r.order === currentOrder + 1); if (nextRankDef) { nextRankDef.criteria.forEach(criterion => { let needed = 0; switch(criterion.type) { case "low_bounties": if (bountyCounts.total < criterion.min) { needed = criterion.min - bountyCounts.total; nextRankRequirements.push(`Claim ${needed} more bounty/ies (any tier)`);} break; case "medium_bounties": const effectiveMedium = bountyCounts.medium + bountyCounts.high; if (effectiveMedium < criterion.min) { needed = criterion.min - effectiveMedium; nextRankRequirements.push(`Claim ${needed} more Medium or High bounty/ies`);} break; case "high_bounties": if (bountyCounts.high < criterion.min) { needed = criterion.min - bountyCounts.high; nextRankRequirements.push(`Claim ${needed} more High bounty/ies`);} break; case "ehb": if (playerStats.ehb < criterion.min) { needed = criterion.min - playerStats.ehb; nextRankRequirements.push(`Gain ${Math.ceil(needed).toLocaleString()} more EHB`);} break; } }); if (nextRankRequirements.length === 0) nextRankRequirements.push(`All requirements met for ${nextRankDef.name}!`); } else { nextRankRequirements.push("You are at the highest rank!"); } return { rank: currentRank, order: currentOrder, next: nextRankRequirements }; }
+
+function getPlayerRank(playerStats: { ehb: number; }, bountyCounts: PlayerBountyCounts): { rank: string; order: number; next: string[] } {
+    let currentRank = "Backpack"; let currentOrder = 1;
+    for (const rankDef of RANK_DEFINITIONS) { if (!rankDef.criteria) continue; const meetsAll = rankDef.criteria.every(criterion => { switch(criterion.type) { case "low_bounties": return bountyCounts.total >= criterion.min; case "medium_bounties": return (bountyCounts.medium + bountyCounts.high) >= criterion.min; case "high_bounties": return bountyCounts.high >= criterion.min; case "ehb": return playerStats.ehb >= criterion.min; default: return false; } }); if (meetsAll) { currentRank = rankDef.name; currentOrder = rankDef.order; break; } }
+    const nextRankRequirements: string[] = []; const nextRankDef = RANK_DEFINITIONS.find(r => r.order === currentOrder + 1);
+    if (nextRankDef) {
+        const highCrit = nextRankDef.criteria.find(c => c.type === 'high_bounties'); const mediumCrit = nextRankDef.criteria.find(c => c.type === 'medium_bounties'); const totalCrit = nextRankDef.criteria.find(c => c.type === 'low_bounties'); const ehbCrit = nextRankDef.criteria.find(c => c.type === 'ehb');
+        let neededHigh = 0; let neededMediumOrHigher = 0;
+        if (highCrit && bountyCounts.high < highCrit.min) { neededHigh = highCrit.min - bountyCounts.high; nextRankRequirements.push(`Claim ${neededHigh} more High bounty/ies`); }
+        if (mediumCrit) { const effectiveMedium = bountyCounts.medium + bountyCounts.high; if (effectiveMedium < mediumCrit.min) { neededMediumOrHigher = mediumCrit.min - effectiveMedium; nextRankRequirements.push(`Claim ${neededMediumOrHigher} more Medium or High bounty/ies`); } }
+        if (totalCrit) { const futureBountyTotal = bountyCounts.total + neededHigh + neededMediumOrHigher; if (futureBountyTotal < totalCrit.min) { const remainingNeeded = totalCrit.min - futureBountyTotal; nextRankRequirements.push(`Claim ${remainingNeeded} more bounty/ies (any tier)`); } }
+        if (ehbCrit && playerStats.ehb < ehbCrit.min) { const neededEhb = ehbCrit.min - playerStats.ehb; nextRankRequirements.push(`Gain ${Math.ceil(neededEhb).toLocaleString()} more EHB`); }
+        if (nextRankRequirements.length === 0) { nextRankRequirements.push(`All requirements met for ${nextRankDef.name}!`); }
+    } else { nextRankRequirements.push("You are at the highest rank!"); }
+    return { rank: currentRank, order: currentOrder, next: nextRankRequirements };
+}
 
 export async function POST(request: Request) {
     const authHeader = request.headers.get('Authorization'); if (!authHeader || !authHeader.startsWith('Bearer ')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); const token = authHeader.split(' ')[1]; const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!); const { data: { user } } = await supabase.auth.getUser(token); if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    const womGroupIdString = process.env.WOM_GROUP_ID; const WOM_GROUP_ID = parseInt(womGroupIdString?.trim() || '0', 10); if (isNaN(WOM_GROUP_ID) || WOM_GROUP_ID !== 5622) return NextResponse.json({ error: `Invalid WOM_GROUP_ID` }, { status: 500 });
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-    const womUrl = `https://api.wiseoldman.net/v2/groups/${WOM_GROUP_ID}`;
-    const womClient = new WOMClient();
 
     try {
-        const [groupRes, allSubmissionsRes, allBountiesRes, oldClanDataRes] = await Promise.all([
-            fetch(womUrl),
+        console.log("Starting fast rank calculation...");
+
+        // --- THE FIX IS HERE ---
+        // Step A: Get the definitive list of current clan members from WOM (one fast call).
+        const womGroupIdString = process.env.WOM_GROUP_ID;
+        const WOM_GROUP_ID = parseInt(womGroupIdString?.trim() || '0', 10);
+        if (isNaN(WOM_GROUP_ID) || WOM_GROUP_ID !== 5622) throw new Error("Invalid WOM_GROUP_ID");
+        const groupRes = await fetch(`https://api.wiseoldman.net/v2/groups/${WOM_GROUP_ID}`);
+        if (!groupRes.ok) throw new Error(`Failed to fetch current member list from WOM: ${groupRes.status}`);
+        const groupData = await groupRes.json();
+        if (!Array.isArray(groupData.memberships)) throw new Error("Invalid WOM membership data");
+        const currentMemberIds = new Set(groupData.memberships.map((m: any) => m.player.id));
+
+        // Step B: Fetch all necessary data from our OWN database.
+        const [allPlayerDetailsRes, allSubmissionsRes, allBountiesRes] = await Promise.all([
+            supabaseAdmin.from('player_details').select('wom_details_json'),
             supabaseAdmin.from('submissions').select('*'),
-            supabaseAdmin.from('bounties').select('id, image_url, is_active'),
-            // Fetch the old data to preserve the spotlight player
-            supabaseAdmin.from('clan_data').select('data').eq('id', 1).single()
+            supabaseAdmin.from('bounties').select('id, image_url, is_active')
         ]);
 
-        if (!groupRes.ok) throw new Error(`Failed WOM fetch: ${groupRes.status}`);
-        const groupData = await groupRes.json();
-        const womMemberships = groupData.memberships;
-        if (!Array.isArray(womMemberships)) throw new Error("Invalid WOM data");
+        const { data: allPlayerDetailsData, error: playerDetailsError } = allPlayerDetailsRes;
+        if (playerDetailsError) throw playerDetailsError;
+        if (!allPlayerDetailsData) throw new Error("Could not fetch player details from Supabase.");
 
+        // Step C: Filter our local data to only include current members.
+        const currentMemberDetails = allPlayerDetailsData
+            .map(p => p.wom_details_json)
+            .filter(details => details && currentMemberIds.has(details.id));
+
+        console.log(`Found ${currentMemberIds.size} current members. Calculating ranks for ${currentMemberDetails.length} matching players in our database.`);
+
+        // All subsequent logic now operates on the CORRECT list of current members.
         const { data: allBounties, error: bountiesError } = allBountiesRes;
         if (bountiesError) throw bountiesError;
         const bountyImageMap = new Map();
@@ -47,33 +75,15 @@ export async function POST(request: Request) {
         const submissionsWithImages = allSubmissions.map(submission => { let bounty_image_url = null; if (submission.submission_type === 'bounty' && submission.bounty_id) { bounty_image_url = bountyImageMap.get(submission.bounty_id) || null; } return { ...submission, bounty_image_url }; });
         const approvedSubmissions = allSubmissions.filter(sub => sub.status === 'approved' && sub.submission_type === 'bounty');
 
-        console.log(`Starting to fetch details for ${womMemberships.length} players...`);
-        const allPlayerDetails = [];
-        const playerIds = womMemberships.map((m: any) => m.player.id).filter(Boolean);
-        const batchSize = 15;
-        for (let i = 0; i < playerIds.length; i += batchSize) {
-            const batch = playerIds.slice(i, i + batchSize);
-            console.log(`Fetching batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(playerIds.length / batchSize)}...`);
-            try {
-                const promises = batch.map((id: number) => womClient.players.getPlayerDetailsById(id));
-                const results = await Promise.all(promises);
-                allPlayerDetails.push(...results.filter(Boolean));
-            } catch (batchError) { console.error(`An error occurred in a fetch batch:`, batchError); }
-            if (i + batchSize < playerIds.length) await sleep(1500);
-        }
-
-        const upsertData = allPlayerDetails.map(details => ({ wom_player_id: details!.id, wom_details_json: details, last_updated: new Date().toISOString() }));
-        if (upsertData.length > 0) {
-            const { error: upsertError } = await supabaseAdmin.from('player_details').upsert(upsertData, { onConflict: 'wom_player_id' });
-            if (upsertError) console.error("Error upserting player details:", upsertError);
-        }
-
         const playerBountyCounts: { [playerId: number]: PlayerBountyCounts } = {};
         approvedSubmissions.forEach(sub => { if (sub.wom_player_id === null) return; const playerId = sub.wom_player_id; if (!playerBountyCounts[playerId]) playerBountyCounts[playerId] = { low: 0, medium: 0, high: 0, total: 0 }; if (sub.bounty_tier === 'low') playerBountyCounts[playerId].low++; if (sub.bounty_tier === 'medium') playerBountyCounts[playerId].medium++; if (sub.bounty_tier === 'high') playerBountyCounts[playerId].high++; playerBountyCounts[playerId].total++; });
 
         let clanMembersRanked: ClanMemberRanked[] = [];
         let ehbLeaderboard: { username: string; displayName: string; ehb: number }[] = [];
         let ehpLeaderboard: { username: string; displayName: string; ehp: number }[] = [];
+
+        const womMemberships = currentMemberDetails.map((p: any) => ({ player: p, role: p.role }));
+
         womMemberships.forEach((membership: any) => {
             const player = membership.player;
             if (!player) return;
@@ -111,18 +121,16 @@ export async function POST(request: Request) {
           activeBountiesCount,
           totalBountiesClaimed,
           totalRewardsPaidInMillions,
-          // Preserve the existing spotlight player
-          spotlightPlayer: oldClanDataRes.data?.data.spotlightPlayer || null,
         };
 
         const { error: updateError } = await supabaseAdmin.from('clan_data').update({ data: computedData }).eq('id', 1);
         if (updateError) throw updateError;
 
         revalidatePath('/');
-        return NextResponse.json({ message: `Clan data refreshed successfully.` });
+        return NextResponse.json({ message: `Rank calculation complete for ${womMemberships.length} current members.` });
 
     } catch (error: any) {
-        console.error('Refresh API Error:', error);
+        console.error('Rank Calculation API Error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
