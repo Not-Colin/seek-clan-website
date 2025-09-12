@@ -24,8 +24,18 @@ export default function Footer() {
             <Link href="/privacy-policy" className="text-gray-400 hover:text-orange-400 transition-colors">Privacy Policy</Link>
           </nav>
         </div>
-        <div className="mt-8 pt-6 border-t border-slate-800 text-center text-xs text-gray-600">
-          <p>© {currentYear} Seek Clan. All rights reserved.</p>
+
+        {/* --- THIS IS THE UPDATED SECTION --- */}
+        <div className="mt-8 pt-6 border-t border-slate-800 text-center text-xs text-gray-500">
+          <p>
+            <Link href="https://www.oldschool.runescape.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-orange-400 transition-colors">
+              Old School RuneScape
+            </Link>
+            {' '}is a trademark of{' '}
+            <Link href="https://www.jagex.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-orange-400 transition-colors">
+              Jagex Ltd
+            </Link>.
+          </p>
         </div>
       </div>
     </footer>

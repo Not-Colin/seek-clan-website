@@ -124,74 +124,83 @@ export default function Home() {
   const latestAchievements = clanData?.submissions?.filter((sub: any) => sub.status === 'approved' && ((sub.submission_type === 'bounty' && sub.bounty_image_url) || (sub.submission_type === 'personal_best'))).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 8) || [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <Header />
-      <main className="px-6 py-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8 text-center"><h1 className="text-4xl font-bold text-white mb-2">Welcome to <span className="text-orange-400" style={{ fontFamily: 'var(--font-pacifico)' }}>Seek</span></h1><p className="text-gray-400 text-lg">Your Oldschool RuneScape Clan Hub</p></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-            <Link href="/bounties" className="block hover:scale-105 transition-transform duration-200"><DataCard title="Active Bounties" value={activeBounties} icon="ri-sword-line" className="bg-orange-800/20 backdrop-blur-sm border border-orange-500/30 hover:border-orange-400/50" iconBgClass="bg-orange-600/20" iconClass="text-orange-400"/></Link>
-            <DataCard title="Total Members" value={totalMembers} icon="ri-user-line" iconBgClass="bg-blue-600/20" iconClass="text-blue-400" />
-            <DataCard title="Total Bounties Claimed" value={totalBountiesClaimed} icon="ri-trophy-line" iconBgClass="bg-yellow-600/20" iconClass="text-yellow-400" />
-            <Link href="/tradelog" className="block hover:scale-105 transition-transform duration-200"><DataCard title="Total Rewards Paid" value={totalRewards} icon="ri-coin-line" className="bg-green-800/20 backdrop-blur-sm border border-green-500/30 hover:border-green-400/50" iconBgClass="bg-green-600/20" iconClass="text-green-400"/></Link>
-          </div>
+    <div className="relative min-h-screen">
+      <div
+        className="fixed inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/images/dashboard-bg.jpg')" }}
+      />
+      <div className="fixed inset-0 bg-gradient-to-br from-slate-900/15 via-slate-800/15 to-slate-900/15" />
 
-          {!loading && (newsPosts.length > 0 || eventPosts.length > 0) && (
-            <div className="mb-12">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <PostColumn title="News" posts={newsPosts} />
-                <PostColumn title="Events" posts={eventPosts} />
-              </div>
+      <div className="relative z-10">
+        <Header />
+        <main className="px-6 py-8">
+          <div className="max-w-7xl mx-auto">
+            <div className="mb-8 text-center"><h1 className="text-4xl font-bold text-white mb-2">Welcome to <span className="text-orange-400" style={{ fontFamily: 'var(--font-pacifico)' }}>Seek</span></h1><p className="text-gray-400 text-lg">Your Oldschool RuneScape Clan Hub</p></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+              <Link href="/bounties" className="block hover:scale-105 transition-transform duration-200"><DataCard title="Active Bounties" value={activeBounties} icon="ri-sword-line" className="bg-orange-800/20 backdrop-blur-sm border border-orange-500/30 hover:border-orange-400/50" iconBgClass="bg-orange-600/20" iconClass="text-orange-400"/></Link>
+              <DataCard title="Total Members" value={totalMembers} icon="ri-user-line" iconBgClass="bg-blue-600/20" iconClass="text-blue-400" />
+              <DataCard title="Total Bounties Claimed" value={totalBountiesClaimed} icon="ri-trophy-line" iconBgClass="bg-yellow-600/20" iconClass="text-yellow-400" />
+              <Link href="/tradelog" className="block hover:scale-105 transition-transform duration-200"><DataCard title="Total Rewards Paid" value={totalRewards} icon="ri-coin-line" className="bg-green-800/20 backdrop-blur-sm border border-green-500/30 hover:border-green-400/50" iconBgClass="bg-green-600/20" iconClass="text-green-400"/></Link>
             </div>
-          )}
 
-          {!loading && spotlightPlayers.length > 0 && (
-            <div className="mb-12">
-              <h2 className="text-3xl font-bold text-orange-400 mb-6 text-center tracking-wide">Player Showcase</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {spotlightPlayers.map((player) => (
-                  <PlayerSpotlightCard key={player.id} player={player} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <h2 className="text-3xl font-bold text-orange-400 mb-6 text-center tracking-wide">Latest Achievements</h2>
-            {loading ? <p className="text-center text-gray-400">Loading achievements...</p> : latestAchievements.length === 0 ? <p className="text-center text-gray-400">No recent achievements have been claimed.</p> : (
-              <div className="overflow-x-auto hide-scrollbar -mx-6 px-6 pb-2">
-                <div className="flex space-x-6">
-                    {latestAchievements.map((ach: any) => {
-                      if (ach.submission_type === 'bounty') {
-                        return (
-                          <div key={ach.id} className="group relative w-64 flex-shrink-0 rounded-xl overflow-hidden border border-slate-700/50 shadow-lg transition-all duration-300">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={getOptimizedImageUrl(ach.bounty_image_url)} alt={ach.bounty_name || 'Bounty image'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
-                            <div className="absolute -left-16 top-9 w-56 transform -rotate-45 bg-red-500 text-center text-white font-bold py-1 shadow-lg">CLAIMED</div>
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
-                            <div className="absolute bottom-0 left-0 right-0 p-4 text-white"><h4 className="font-bold text-base leading-tight">{ach.player_name}</h4><p className="text-sm text-gray-300 truncate">{ach.bounty_name}</p></div>
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div key={ach.id} className="w-64 flex-shrink-0 rounded-xl border border-slate-700/50 shadow-lg bg-slate-800 p-6 flex flex-col text-center">
-                            <div className="flex-grow flex flex-col items-center justify-center">
-                              <i className="ri-medal-line text-7xl text-yellow-400 mb-4"></i>
-                              <h3 className="font-bold text-white text-lg leading-tight mb-3 text-center">{ach.personal_best_category}</h3>
-                              {ach.personal_best_time && (<div className="flex items-center justify-center gap-2 mb-4"><i className="ri-timer-line text-lg text-orange-400"></i><p className="text-2xl font-bold text-white tracking-wider">{ach.personal_best_time}</p></div>)}
-                              <p className="text-sm text-slate-400">{getTimeAgo(ach.created_at)}</p>
+            {!loading && spotlightPlayers.length > 0 && (
+                          <div className="mb-12">
+                            <h2 className="text-3xl font-bold text-orange-400 mb-6 text-center tracking-wide">Player Showcase</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                              {spotlightPlayers.map((player) => (
+                                <PlayerSpotlightCard key={player.id} player={player} />
+                              ))}
                             </div>
-                            <div className="border-t border-slate-700 pt-3"><p className="text-lg font-semibold text-white truncate">{ach.player_name}</p></div>
                           </div>
-                        );
-                      }
-                    })}
+                        )}
+
+            {!loading && (newsPosts.length > 0 || eventPosts.length > 0) && (
+              <div className="mb-12">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <PostColumn title="News" posts={newsPosts} />
+                  <PostColumn title="Events" posts={eventPosts} />
                 </div>
               </div>
             )}
+
+
+            <div>
+              <h2 className="text-3xl font-bold text-orange-400 mb-6 text-center tracking-wide">Latest Achievements</h2>
+              {loading ? <p className="text-center text-gray-400">Loading achievements...</p> : latestAchievements.length === 0 ? <p className="text-center text-gray-400">No recent achievements have been claimed.</p> : (
+                <div className="overflow-x-auto hide-scrollbar -mx-6 px-6 pb-2">
+                  <div className="flex space-x-6">
+                      {latestAchievements.map((ach: any) => {
+                        if (ach.submission_type === 'bounty') {
+                          return (
+                            <div key={ach.id} className="group relative w-64 flex-shrink-0 rounded-xl overflow-hidden border border-slate-700/50 shadow-lg transition-all duration-300">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={getOptimizedImageUrl(ach.bounty_image_url)} alt={ach.bounty_name || 'Bounty image'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                              <div className="absolute -left-16 top-9 w-56 transform -rotate-45 bg-red-500 text-center text-white font-bold py-1 shadow-lg">CLAIMED</div>
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+                              <div className="absolute bottom-0 left-0 right-0 p-4 text-white"><h4 className="font-bold text-base leading-tight">{ach.player_name}</h4><p className="text-sm text-gray-300 truncate">{ach.bounty_name}</p></div>
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div key={ach.id} className="w-64 flex-shrink-0 rounded-xl border border-slate-700/50 shadow-lg bg-slate-800 p-6 flex flex-col text-center">
+                              <div className="flex-grow flex flex-col items-center justify-center">
+                                <i className="ri-medal-line text-7xl text-yellow-400 mb-4"></i>
+                                <h3 className="font-bold text-white text-lg leading-tight mb-3 text-center">{ach.personal_best_category}</h3>
+                                {ach.personal_best_time && (<div className="flex items-center justify-center gap-2 mb-4"><i className="ri-timer-line text-lg text-orange-400"></i><p className="text-2xl font-bold text-white tracking-wider">{ach.personal_best_time}</p></div>)}
+                                <p className="text-sm text-slate-400">{getTimeAgo(ach.created_at)}</p>
+                              </div>
+                              <div className="border-t border-slate-700 pt-3"><p className="text-lg font-semibold text-white truncate">{ach.player_name}</p></div>
+                            </div>
+                          );
+                        }
+                      })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
