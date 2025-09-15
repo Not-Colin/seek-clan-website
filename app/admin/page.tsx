@@ -82,25 +82,34 @@ export default function AdminPage() {
     // --- NEW: Fast Group Sync Handler ---
     const handleWomGroupSync = useCallback(async () => {
         setIsSyncingWom(true);
-        setWomSyncStatus('Fetching bulk data from Wise Old Man...');
+        // Update the initial status message to reflect the background process
+        setWomSyncStatus('Initiating background sync...');
         try {
             const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
             if (sessionError || !session) throw new Error("Your session has expired. Please log in again.");
 
+            // --- THIS IS THE CHANGE ---
+            // We now call 'sync-wom-group-data' and provide the starting index
             const response = await fetch('/api/sync-wom-group-data', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                    'Content-Type': 'application/json' // Add Content-Type header
+                },
+                body: JSON.stringify({ startIndex: 0 }) // Send initial index
             });
+            // --- END OF CHANGE ---
 
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || 'An unknown error occurred.');
-            setWomSyncStatus(result.message);
+            setWomSyncStatus(result.message); // This will now show the "Sync initiated..." message
         } catch (error: any) {
             setWomSyncStatus(`Error: ${error.message}`);
             if (error.message.includes("session has expired")) await handleLogout();
         } finally {
             setIsSyncingWom(false);
-            setTimeout(() => setWomSyncStatus(''), 10000);
+            // The status message will now persist to let the admin know it's running
+            setTimeout(() => setWomSyncStatus(''), 20000);
         }
     }, [handleLogout]);
 
@@ -172,7 +181,7 @@ export default function AdminPage() {
 
                                     <div className="mb-6 bg-slate-700/50 p-4 rounded-lg">
                                         <p className="text-sm text-gray-300 mb-3">
-                                            <strong>Step 1 (Manual):</strong> Trigger the mass-update on the Wise Old Man website. This tells their servers to refresh all 110+ members.
+                                            <strong>Step 1:</strong> Trigger the mass-update on the Wise Old Man website.
                                         </p>
                                         <a
                                             href="https://wiseoldman.net/groups/5622?dialog=update-all"
@@ -180,16 +189,16 @@ export default function AdminPage() {
                                             rel="noopener noreferrer"
                                             className="block w-full text-center bg-yellow-600 hover:bg-yellow-700 text-white font-medium py-2 px-4 rounded-lg"
                                         >
-                                            Go to WOM to Update All Members
+                                            Button to our WOM group update
                                         </a>
                                         <p className="text-xs text-gray-400 mt-2">
-                                            You will need to enter the group verification code. After confirming, wait 30-60 seconds before proceeding to Step 2.
+                                            Enter WOM group code. Wait 10 Minutes before starting step 2.
                                         </p>
                                     </div>
 
                                     <div className="mb-6">
                                         <p className="text-sm text-gray-300 mb-2">
-                                            <strong>Step 2 (Fast Sync):</strong> After updating on WOM, click here to pull all the fresh data into our database in a single call.
+                                            <strong>Step 2 (Slow Update):</strong> After updating on WOM, click here to pull all the fresh data into our database. This will take at least 10 minutes but you can click it and then close the browser
                                         </p>
                                         <button
                                             type="button"
@@ -204,7 +213,7 @@ export default function AdminPage() {
 
                                     <div>
                                         <p className="text-sm text-gray-400 mb-2">
-                                            <strong>Step 3 (Calculate Ranks):</strong> Once the data is synced, recalculate all clan ranks.
+                                            <strong>Step 3:</strong> Once the data is synced, recalculate all clan ranks. Instant process
                                         </p>
                                         <button
                                             type="button"
