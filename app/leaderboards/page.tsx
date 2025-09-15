@@ -75,7 +75,23 @@ export default function LeaderboardsPage() {
             const playerNameLower = sub.player_name.toLowerCase();
             if (!playerStats[sub.player_name]) { const playerId = playerNameToIdMap.get(playerNameLower); if (playerId) playerStats[sub.player_name] = { id: playerId, name: sub.player_name, low: 0, medium: 0, high: 0, totalBounties: 0, totalGP: 0 }; }
             const stats = playerStats[sub.player_name];
-            if (stats) { const tier = sub.bounty_tier; if (tier === 'low' || tier === 'medium' || tier === 'high') { stats[tier]++; stats.totalBounties++; stats.totalGP += tier === 'low' ? 2 : tier === 'medium' ? 5 : 10; } }
+            // --- FIX: Replaced implicit index access with explicit, type-safe checks ---
+            if (stats) {
+              const tier = sub.bounty_tier;
+              if (tier === 'low') {
+                stats.low++;
+                stats.totalGP += 2;
+                stats.totalBounties++;
+              } else if (tier === 'medium') {
+                stats.medium++;
+                stats.totalGP += 5;
+                stats.totalBounties++;
+              } else if (tier === 'high') {
+                stats.high++;
+                stats.totalGP += 10;
+                stats.totalBounties++;
+              }
+            }
           });
           setBountyHunters(Object.values(playerStats).sort((a, b) => b.totalGP - a.totalGP));
           const activePersonalBests = submissionsData.filter(sub => sub.submission_type === 'personal_best' && activeClanMembers.has(sub.player_name.toLowerCase()));
