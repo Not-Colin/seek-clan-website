@@ -37,15 +37,7 @@ interface ClanData { rankedPlayers: { id: number; displayName: string; }[]; }
 // --- Reusable Components ---
 const PbCategorySection = ({ category, records }: { category: string; records: Submission[] }) => ( <div className="mb-10"> <h3 className="text-xl font-semibold text-orange-400 mb-4 border-b-2 border-orange-500/30 pb-2">{category}</h3> <div className="overflow-x-auto"><table className="w-full text-left"><thead><tr className="border-b border-slate-700"><th className="p-3 text-gray-400 font-medium text-sm w-16">Rank</th><th className="p-3 text-gray-400 font-medium text-sm">Player</th><th className="p-3 text-gray-400 font-medium text-sm">Time</th><th className="p-3 text-gray-400 font-medium text-sm text-center">Proof</th></tr></thead><tbody>{records.map((pb, index) => (<tr key={pb.id} className="border-b border-slate-800 hover:bg-slate-700/20"><td className="p-3 text-white font-bold text-lg">#{index + 1}</td><td className="p-3 text-white font-semibold">{pb.player_name}</td><td className="p-3 text-orange-400 font-bold text-lg">{pb.personal_best_time}</td><td className="p-3 text-center"><a href={pb.proof_image_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 text-sm font-medium">View</a></td></tr>))}</tbody></table></div></div>);
 const BountyHunterCard = ({ player, rank }: { player: BountyHunterStat; rank: number }) => ( <Link href={`/players/${player.id}`} className="block transition-transform duration-200 hover:scale-[1.02] focus:scale-[1.02]"><div className={`bg-slate-800/70 p-4 rounded-xl border-l-4 border-slate-600 flex flex-col sm:flex-row items-center gap-4`}><div className="flex items-center justify-center w-20 flex-shrink-0"><span className={`text-4xl font-black text-orange-400`}>{rank}</span></div><div className="flex-grow text-center sm:text-left"><p className="text-xl font-bold text-white">{player.name}</p><p className="text-lg font-semibold text-green-400">{player.totalGP}M GP Earned</p></div><div className="flex items-center justify-center gap-6 bg-slate-900/50 p-3 rounded-lg flex-shrink-0"><div className="text-center"><p className="text-sm font-medium text-blue-400">Low</p><p className="text-xl font-bold text-white">{player.low}</p></div><div className="text-center"><p className="text-sm font-medium text-purple-400">Medium</p><p className="text-xl font-bold text-white">{player.medium}</p></div><div className="text-center"><p className="text-sm font-medium text-red-400">High</p><p className="text-xl font-bold text-white">{player.high}</p></div></div></div></Link>);
-
-const ClanTotalKcCard = ({ boss }: { boss: { key: string; name: string; totalKc: number } }) => (
-    <div className="bg-slate-800/70 p-6 rounded-xl text-center border border-slate-700/50 flex flex-col justify-center">
-        <p className="text-lg font-bold text-white leading-tight mb-2">{boss.name}</p>
-        {/* --- UPDATED: Color changed to text-orange-300 --- */}
-        <p className="text-4xl font-black text-orange-300 tracking-tighter">{boss.totalKc.toLocaleString()}</p>
-        <p className="text-xs text-gray-500 uppercase">Total Clan Kills</p>
-    </div>
-);
+const ClanTotalKcCard = ({ boss }: { boss: { key: string; name: string; totalKc: number } }) => ( <div className="bg-slate-800/70 p-6 rounded-xl text-center border border-slate-700/50 flex flex-col justify-center"> <p className="text-lg font-bold text-white leading-tight mb-2">{boss.name}</p> <p className="text-4xl font-black text-orange-300 tracking-tighter">{boss.totalKc.toLocaleString()}</p> <p className="text-xs text-gray-500 uppercase">Total Clan Kills</p> </div>);
 
 export default function LeaderboardsPage() {
   const [activeTab, setActiveTab] = useState('bountyHunters');
@@ -71,13 +63,40 @@ export default function LeaderboardsPage() {
         const activeClanMembers = new Set(clanData.rankedPlayers.map(p => p.displayName.toLowerCase()));
         const playerNameToIdMap = new Map<string, number>();
         clanData.rankedPlayers.forEach(p => playerNameToIdMap.set(p.displayName.toLowerCase(), p.id));
+
         if (submissionsData) {
           const playerStats: { [key: string]: BountyHunterStat } = {};
           submissionsData.filter(sub => sub.submission_type === 'bounty' && activeClanMembers.has(sub.player_name.toLowerCase())).forEach(sub => {
             const playerNameLower = sub.player_name.toLowerCase();
-            if (!playerStats[sub.player_name]) { const playerId = playerNameToIdMap.get(playerNameLower); if (playerId) playerStats[sub.player_name] = { id: playerId, name: sub.player_name, low: 0, medium: 0, high: 0, totalBounties: 0, totalGP: 0 }; }
+            if (!playerStats[sub.player_name]) {
+              const playerId = playerNameToIdMap.get(playerNameLower);
+              if (playerId) playerStats[sub.player_name] = { id: playerId, name: sub.player_name, low: 0, medium: 0, high: 0, totalBounties: 0, totalGP: 0 };
+            }
+
             const stats = playerStats[sub.player_name];
-            if (stats) { const tier = sub.bounty_tier; if (tier === 'low' || tier === 'medium' || tier === 'high') { stats[tier]++; stats.totalBounties++; stats.totalGP += tier === 'low' ? 2 : tier === 'medium' ? 5 : 10; } }
+            if (stats) {
+              const tier = sub.bounty_tier;
+              // --- THIS IS THE FIX ---
+              // Replace the implicit indexing with an explicit switch statement for type safety.
+              if (tier === 'low' || tier === 'medium' || tier === 'high') {
+                stats.totalBounties++;
+                switch (tier) {
+                  case 'low':
+                    stats.low++;
+                    stats.totalGP += 2;
+                    break;
+                  case 'medium':
+                    stats.medium++;
+                    stats.totalGP += 5;
+                    break;
+                  case 'high':
+                    stats.high++;
+                    stats.totalGP += 10;
+                    break;
+                }
+              }
+              // --- END OF FIX ---
+            }
           });
           setBountyHunters(Object.values(playerStats).sort((a, b) => b.totalGP - a.totalGP));
           const activePersonalBests = submissionsData.filter(sub => sub.submission_type === 'personal_best' && activeClanMembers.has(sub.player_name.toLowerCase()));
@@ -94,38 +113,18 @@ export default function LeaderboardsPage() {
     fetchLeaderboardData();
   }, []);
 
-  // --- RESTORED: Full time parsing function ---
   const timeToSeconds = (time: string | null): number => {
-    if (!time) return Infinity;
-    const parts = time.split(':');
-    let seconds = 0;
-    if (parts.length === 3) { // HH:MM:SS.ss
-      seconds += parseInt(parts[0], 10) * 3600;
-      seconds += parseInt(parts[1], 10) * 60;
-      seconds += parseFloat(parts[2]);
-    } else if (parts.length === 2) { // MM:SS.ss
-      seconds += parseInt(parts[0], 10) * 60;
-      seconds += parseFloat(parts[1]);
-    } else if (parts.length === 1) { // SS.ss
-      seconds += parseFloat(parts[0]);
-    }
+    if (!time) return Infinity; const parts = time.split(':'); let seconds = 0;
+    if (parts.length === 3) { seconds += parseInt(parts[0], 10) * 3600; seconds += parseInt(parts[1], 10) * 60; seconds += parseFloat(parts[2]); }
+    else if (parts.length === 2) { seconds += parseInt(parts[0], 10) * 60; seconds += parseFloat(parts[1]); }
+    else if (parts.length === 1) { seconds += parseFloat(parts[0]); }
     return seconds || Infinity;
   };
 
-  // --- RESTORED: Full PB grouping and sorting logic ---
   const groupedAndSortedPBs = useMemo(() => {
     const grouped: { [category: string]: Submission[] } = {};
-    personalBests.forEach(pb => {
-      if (pb.personal_best_category) {
-        if (!grouped[pb.personal_best_category]) {
-          grouped[pb.personal_best_category] = [];
-        }
-        grouped[pb.personal_best_category].push(pb);
-      }
-    });
-    for (const category in grouped) {
-      grouped[category].sort((a, b) => timeToSeconds(a.personal_best_time) - timeToSeconds(b.personal_best_time));
-    }
+    personalBests.forEach(pb => { if (pb.personal_best_category) { if (!grouped[pb.personal_best_category]) { grouped[pb.personal_best_category] = []; } grouped[pb.personal_best_category].push(pb); } });
+    for (const category in grouped) { grouped[category].sort((a, b) => timeToSeconds(a.personal_best_time) - timeToSeconds(b.personal_best_time)); }
     return grouped;
   }, [personalBests]);
 
@@ -159,14 +158,7 @@ export default function LeaderboardsPage() {
               {activeTab === 'bountyHunters' ? (
                 bountyHunters.length === 0 ? <p className="text-center text-gray-400">No approved bounties yet from active members.</p> : (<div className="space-y-4">{bountyHunters.map((player, index) => (<BountyHunterCard key={player.name} player={player} rank={index + 1} />))}</div>)
               ) : activeTab === 'personalBests' ? (
-                <div>
-                  {pbCategories.map(category => {
-                    const records = groupedAndSortedPBs[category];
-                    if (!records || records.length === 0) return null;
-                    return <PbCategorySection key={category} category={category} records={records} />;
-                  })}
-                  {Object.keys(groupedAndSortedPBs).length === 0 && (<p className="text-center text-gray-400 py-4">No approved personal best records from active members.</p>)}
-                </div>
+                <div>{pbCategories.map(category => { const records = groupedAndSortedPBs[category]; if (!records || records.length === 0) return null; return <PbCategorySection key={category} category={category} records={records} />; })} {Object.keys(groupedAndSortedPBs).length === 0 && (<p className="text-center text-gray-400 py-4">No approved personal best records from active members.</p>)}</div>
               ) : ( // Clan Totals Tab Content
                 <div>
                   <h3 className="text-2xl font-semibold text-white mb-6 text-center">Total Clan Kill Counts</h3>
