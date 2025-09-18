@@ -39,9 +39,10 @@ export async function POST(request: Request) {
 
         // --- MODIFIED NOTIFICATION LOGIC WITH DEBUGGING ---
         try {
+            // 1. THE QUERY FIX: We tell Supabase to select the 'username' key from the 'wom_details_json' column.
             const playerQuery = supabaseAdmin
                 .from('player_details')
-                .select('username') // Use the corrected column name
+                .select('wom_details_json->>username')
                 .eq('wom_player_id', parseInt(playerId, 10))
                 .single();
 
@@ -53,7 +54,9 @@ export async function POST(request: Request) {
 
             const [playerRes, teamRes] = await Promise.all([playerQuery, teamQuery]);
 
-            const playerName = playerRes.data?.username || 'Unknown Player';
+            // 2. THE DATA ACCESS FIX: The key in the returned object will be the exact string from the select.
+            //    We must use bracket notation because the key contains special characters (->>).
+            const playerName = playerRes.data?.['wom_details_json->>username'] || 'Unknown Player';
             const teamName = teamRes.data?.team_name || 'Unknown Team';
             const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
 
@@ -66,22 +69,15 @@ export async function POST(request: Request) {
                 proofImageUrl: publicUrl
             };
 
-            // Define the URL separately for clear logging
+            // The rest of the logic remains the same.
             const notificationUrl = `${siteUrl}/api/send-notification`;
-
-            console.log(`Bingo Route: Attempting to POST to: ${notificationUrl}`);
-            console.log("Bingo Route: Preparing to send this payload:", JSON.stringify(notificationPayload, null, 2));
-
-            // Use await to make the code wait for the fetch to complete
             const notificationResponse = await fetch(notificationUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(notificationPayload)
             });
 
-            // Check if the fetch was successful (status 200-299)
             if (!notificationResponse.ok) {
-                // Log the failure details if it wasn't successful
                 const errorBody = await notificationResponse.text();
                 console.error(`ERROR: Notification dispatch to ${notificationUrl} failed!`);
                 console.error(`Status: ${notificationResponse.status} ${notificationResponse.statusText}`);
