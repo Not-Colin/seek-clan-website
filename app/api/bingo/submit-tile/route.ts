@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 
             // 2. THE DATA ACCESS FIX: The key in the returned object will be the exact string from the select.
             //    We must use bracket notation because the key contains special characters (->>).
-            const playerName = playerRes.data?.['wom_details_json->>username'] || 'Unknown Player';
+            const playerName = (playerRes.data as any)?.['wom_details_json->>username'] || 'Unknown Player';
             const teamName = teamRes.data?.team_name || 'Unknown Team';
             const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
 
