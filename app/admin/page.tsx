@@ -90,7 +90,8 @@ export default function AdminPage() {
         else setAllBingoGames(data || []);
     }, []);
     const fetchTeamsForGame = useCallback(async (gameId: number) => {
-        const { data, error } = await supabase.from('bingo_teams').select(`id, team_name, bingo_team_members ( player_id, player_details ( wom_details_json ) )`).eq('game_id', gameId);
+        // --- THIS IS THE FIX: Added !player_id to force a single object return ---
+        const { data, error } = await supabase.from('bingo_teams').select(`id, team_name, bingo_team_members ( player_id, player_details!player_id ( wom_details_json ) )`).eq('game_id', gameId);
         if (error) console.error("Error fetching teams:", error);
         else setTeamsForSelectedGame(data || []);
     }, []);
