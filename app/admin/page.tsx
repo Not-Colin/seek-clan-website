@@ -77,10 +77,33 @@ export default function AdminPage() {
     const fetchAllClanMembers = useCallback(async () => { const { data, error } = await supabase.from('player_details').select('wom_player_id, wom_details_json').order('wom_details_json->>username', { ascending: true }); if (error) { console.error('Error fetching clan members:', error); } else { const members = data.map(p => ({ id: p.wom_player_id, displayName: p.wom_details_json?.username || 'Unknown' })).filter(p => p.displayName !== 'Unknown'); setAllClanMembers(members); if (members.length > 0) { setSelectedPlayerId(members[0].id.toString()); } } }, []);
     const fetchPosts = useCallback(async () => { const { data, error } = await supabase.from('posts').select('*').order('status', { ascending: false }).order('published_at', { ascending: false }); if (error) console.error("Error fetching posts:", error); else setPosts(data || []); }, []);
     const fetchPendingBingoSubmissions = useCallback(async () => {
-        const { data, error } = await supabase.from('bingo_submissions').select(`id, created_at, tile_text, proof_image_url, bingo_teams ( team_name ), player_details!player_id ( wom_details_json->>username )`).eq('status', 'pending').order('created_at', { ascending: true });
-        if (error) { console.error('Error fetching pending bingo submissions:', error); setPendingBingoSubmissions([]);
+        // The query is now much simpler!
+        const { data, error } = await supabase
+            .from('bingo_submissions')
+            .select(`
+                id,
+                created_at,
+                tile_text,
+                proof_image_url,
+                player_name,
+                bingo_teams ( team_name )
+            `)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: true });
+
+        if (error) {
+            console.error('Error fetching pending bingo submissions:', error);
+            setPendingBingoSubmissions([]);
         } else {
-            const formattedData = data.map(sub => ({ id: sub.id, created_at: sub.created_at, tile_text: sub.tile_text, proof_image_url: sub.proof_image_url, team_name: (sub.bingo_teams as any)?.team_name ?? 'Unknown Team', player_name: (sub.player_details as any)?.username ?? 'Unknown Player', }));
+            // The mapping is also simpler and more direct.
+            const formattedData = data.map(sub => ({
+                id: sub.id,
+                created_at: sub.created_at,
+                tile_text: sub.tile_text,
+                proof_image_url: sub.proof_image_url,
+                team_name: (sub.bingo_teams as any)?.team_name ?? 'Unknown Team',
+                player_name: sub.player_name ?? 'Unknown Player',
+            }));
             setPendingBingoSubmissions(formattedData);
         }
     }, []);
