@@ -149,10 +149,10 @@ export default function AdminPage() {
         const currentUser = session?.user ?? null;
         setUser(currentUser);
         if (currentUser) {
-            await Promise.all([fetchPendingSubmissions(), fetchBounties(), fetchPersonalBests(), fetchSettings(), fetchApprovedBounties(), fetchAllClanMembers(), fetchPosts(), fetchAllBingoGames()]);
+            await Promise.all([fetchPendingSubmissions(), fetchBounties(), fetchPersonalBests(), fetchSettings(), fetchApprovedBounties(), fetchAllClanMembers(), fetchPosts(), fetchAllBingoGames(), fetchPendingBingoSubmissions()]);
         }
         setLoading(false);
-    }, [fetchBounties, fetchPendingSubmissions, fetchPersonalBests, fetchSettings, fetchApprovedBounties, fetchAllClanMembers, fetchPosts, fetchAllBingoGames]);
+    }, [fetchBounties, fetchPendingSubmissions, fetchPersonalBests, fetchSettings, fetchApprovedBounties, fetchAllClanMembers, fetchPosts, fetchAllBingoGames, fetchPendingBingoSubmissions]);
 
     useEffect(() => { checkUserAndLoadData(); }, [checkUserAndLoadData]);
 
