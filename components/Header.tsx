@@ -45,6 +45,7 @@ export default function Header() {
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', href: '/' },
     { id: 'bounties', label: 'Current Bounties', href: '/bounties' },
+    { id: 'bingo', label: 'Bingo', href: '/bingo' },
     { id: 'leaderboards', label: 'Leaderboards', href: '/leaderboards' },
     { id: 'ranks', label: 'Current Ranks', href: '/ranks' },
     { id: 'submit', label: 'Submit Achievement', href: '/submit' },
