@@ -12,15 +12,16 @@ export async function POST(request: Request) {
         const tileText = formData.get('tileText') as string;
         const tilePosition = formData.get('tilePosition') as string;
         const playerId = formData.get('playerId') as string;
+
+        // --- GRAB THE PLAYER NAME FROM THE FORM ---
+        const playerNameFromForm = formData.get('playerName') as string;
+
         const password = formData.get('password') as string;
 
-        // --- ADDING A LOG HERE TO VERIFY THE PLAYER ID ---
-        console.log(`Bingo submission started for player ID: ${playerId}`);
-
+        // ... validation and file upload logic remains the same ...
         if (!proofFile || !gameId || !teamId || !tileText || !tilePosition || !playerId || !password) {
             return NextResponse.json({ error: 'Missing required submission data.' }, { status: 400 });
         }
-        // ... (rest of the validation and upload logic remains the same) ...
         const { data: game, error: gameError } = await supabaseAdmin.from('bingo_games').select('password, name').eq('id', gameId).single();
         if (gameError || !game) throw new Error('Could not find the specified bingo game.');
         if (game.password && game.password !== password) {
@@ -37,57 +38,39 @@ export async function POST(request: Request) {
         });
         if (insertError) throw insertError;
 
-        // --- MODIFIED NOTIFICATION LOGIC WITH DEBUGGING ---
+        // --- SIMPLIFIED NOTIFICATION LOGIC ---
         try {
-            // 1. THE QUERY FIX: We tell Supabase to select the 'username' key from the 'wom_details_json' column.
-            const playerQuery = supabaseAdmin
-                .from('player_details')
-                .select('wom_details_json->>username')
-                .eq('wom_player_id', parseInt(playerId, 10))
-                .single();
+            // We NO LONGER need to query the database for the player's name.
+            // We use the one sent from the form directly.
+            const playerName = playerNameFromForm || 'Unknown Player';
 
-            const teamQuery = supabaseAdmin
+            // We still need the team name
+            const { data: teamData } = await supabaseAdmin
                 .from('bingo_teams')
                 .select('team_name')
                 .eq('id', teamId)
                 .single();
-
-            const [playerRes, teamRes] = await Promise.all([playerQuery, teamQuery]);
-
-            // 2. THE DATA ACCESS FIX: The key in the returned object will be the exact string from the select.
-            //    We must use bracket notation because the key contains special characters (->>).
-            const playerName = (playerRes.data as any)?.['wom_details_json->>username'] || 'Unknown Player';
-            const teamName = teamRes.data?.team_name || 'Unknown Team';
+            const teamName = teamData?.team_name || 'Unknown Team';
             const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
 
             const notificationPayload = {
                 submissionType: 'bingo',
-                playerName: playerName,
+                playerName: playerName, // Use the name from the form!
                 teamName: teamName,
                 gameName: game.name,
                 tileText: tileText,
                 proofImageUrl: publicUrl
             };
 
-            // The rest of the logic remains the same.
             const notificationUrl = `${siteUrl}/api/send-notification`;
-            const notificationResponse = await fetch(notificationUrl, {
+            await fetch(notificationUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(notificationPayload)
             });
 
-            if (!notificationResponse.ok) {
-                const errorBody = await notificationResponse.text();
-                console.error(`ERROR: Notification dispatch to ${notificationUrl} failed!`);
-                console.error(`Status: ${notificationResponse.status} ${notificationResponse.statusText}`);
-                console.error(`Response Body: ${errorBody}`);
-            } else {
-                console.log("SUCCESS: Notification dispatch was successful.");
-            }
-
         } catch (notificationError) {
-            console.error("CRITICAL ERROR: Failed to gather data for or dispatch bingo notification:", notificationError);
+            console.error("Failed to gather data for bingo notification:", notificationError);
         }
 
         return NextResponse.json({ message: 'Tile submitted successfully! An admin will review it shortly.' });

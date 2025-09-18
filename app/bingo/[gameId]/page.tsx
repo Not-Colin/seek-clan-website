@@ -33,8 +33,29 @@ const SubmissionModal = ({ tile, game, allPlayers, onClose, onSubmitSuccess }: {
         if (!proofFile || !selectedPlayerId || !password) { setError('Please select your name, enter the password, and select a proof image.'); return; }
         const playerTeam = game.bingo_teams.find(team => team.bingo_team_members.some(m => m.player_details.wom_player_id === Number(selectedPlayerId)));
         if (!playerTeam) { setError('The selected player is not on a team for this game.'); return; }
+
+        // --- START OF NEW CODE ---
+        // Find the full player object from the list to get their display name
+        const selectedPlayer = allPlayers.find(p => p.wom_player_id.toString() === selectedPlayerId);
+        if (!selectedPlayer) {
+            setError('An error occurred while finding player details. Please refresh.');
+            return;
+        }
+        // --- END OF NEW CODE ---
+
         setIsSubmitting(true); setError(''); const formData = new FormData();
-        formData.append('proofFile', proofFile); formData.append('gameId', String(game.id)); formData.append('teamId', String(playerTeam.id)); formData.append('playerId', selectedPlayerId); formData.append('tileText', tile.text); formData.append('tilePosition', String(tile.position)); formData.append('password', password);
+        formData.append('proofFile', proofFile);
+        formData.append('gameId', String(game.id));
+        formData.append('teamId', String(playerTeam.id));
+        formData.append('playerId', selectedPlayerId);
+
+        // --- THE CRITICAL ADDITION ---
+        // Add the player's actual name to the form data
+        formData.append('playerName', selectedPlayer.displayName);
+
+        formData.append('tileText', tile.text);
+        formData.append('tilePosition', String(tile.position));
+        formData.append('password', password);
         try { const response = await fetch('/api/bingo/submit-tile', { method: 'POST', body: formData }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Submission failed.'); onSubmitSuccess(result.message); } catch (err: any) { setError(err.message); } finally { setIsSubmitting(false); }
     };
     return (<div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"><div className="bg-slate-800 p-6 rounded-lg border border-slate-700 w-full max-w-md"><h3 className="text-lg font-bold text-white mb-2">Submit Tile</h3><p className="bg-slate-700 p-3 rounded text-orange-300 text-center mb-4">&quot;{tile.text}&quot;</p><form onSubmit={handleSubmit} className="space-y-4"><div><label htmlFor="playerSelect" className="block text-sm font-medium text-gray-300 mb-1">Select Your Name</label><select id="playerSelect" value={selectedPlayerId} onChange={(e) => setSelectedPlayerId(e.target.value)} required className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white"><option value="" disabled>-- Choose your name --</option>{allPlayers.map(p => <option key={p.wom_player_id} value={p.wom_player_id}>{p.displayName}</option>)}</select></div><div><label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-1">Bingo Password</label><input type="password" id="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white" /></div><div><label htmlFor="proof" className="block text-sm font-medium text-gray-300 mb-1">Proof Screenshot</label><input type="file" id="proof" onChange={(e) => setProofFile(e.target.files ? e.target.files[0] : null)} required accept="image/png, image/jpeg, image/gif" className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-orange-600/20 file:text-orange-300" /></div>{error && <p className="text-sm text-red-400">{error}</p>}<div className="flex gap-4"><button type="button" onClick={onClose} className="w-full bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg">Cancel</button><button type="submit" disabled={isSubmitting} className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg disabled:bg-slate-600">{isSubmitting ? 'Submitting...' : 'Submit for Review'}</button></div></form></div></div>);
