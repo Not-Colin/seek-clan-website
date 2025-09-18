@@ -90,11 +90,34 @@ export default function AdminPage() {
         else setAllBingoGames(data || []);
     }, []);
     const fetchTeamsForGame = useCallback(async (gameId: number) => {
-        // --- THIS IS THE FIX ---
-        // The `!inner` hint tells Supabase this is a one-to-one join, forcing a single object return
-        const { data, error } = await supabase.from('bingo_teams').select(`id, team_name, bingo_team_members!inner ( player_id, player_details!player_id ( wom_details_json ) )`).eq('game_id', gameId);
-        if (error) console.error("Error fetching teams:", error);
-        else setTeamsForSelectedGame(data as any[] || []); // Cast to `any` to bypass the strict check which is now correct
+        const { data, error } = await supabase
+            .from('bingo_teams')
+            .select(`
+                id,
+                team_name,
+                bingo_team_members (
+                    player_id,
+                    player_details ( wom_details_json )
+                )
+            `)
+            .eq('game_id', gameId);
+
+        if (error) {
+            console.error("Error fetching teams:", error);
+            setTeamsForSelectedGame([]);
+            return;
+        }
+
+        const formattedData = data.map(team => ({
+            id: team.id,
+            team_name: team.team_name,
+            bingo_team_members: team.bingo_team_members.map((member: any) => ({
+                player_id: member.player_id,
+                player_details: member.player_details // The shape should now be correct
+            }))
+        }));
+
+        setTeamsForSelectedGame(formattedData);
     }, []);
 
     const checkUserAndLoadData = useCallback(async () => {

@@ -1,10 +1,7 @@
-// app/api/bingo/submit-tile/route.ts (PASSWORD-BASED)
-
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request: Request) {
-    // Use the admin client for all operations
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
     try {
@@ -15,54 +12,87 @@ export async function POST(request: Request) {
         const tileText = formData.get('tileText') as string;
         const tilePosition = formData.get('tilePosition') as string;
         const playerId = formData.get('playerId') as string;
-        const password = formData.get('password') as string; // Password from the form
+        const password = formData.get('password') as string;
+
+        // --- ADDING A LOG HERE TO VERIFY THE PLAYER ID ---
+        console.log(`Bingo submission started for player ID: ${playerId}`);
 
         if (!proofFile || !gameId || !teamId || !tileText || !tilePosition || !playerId || !password) {
             return NextResponse.json({ error: 'Missing required submission data.' }, { status: 400 });
         }
-
-        // 1. Fetch the specific game's password
-        const { data: game, error: gameError } = await supabaseAdmin
-            .from('bingo_games')
-            .select('password')
-            .eq('id', gameId)
-            .single();
-
+        // ... (rest of the validation and upload logic remains the same) ...
+        const { data: game, error: gameError } = await supabaseAdmin.from('bingo_games').select('password, name').eq('id', gameId).single();
         if (gameError || !game) throw new Error('Could not find the specified bingo game.');
-
-        // 2. Validate the password
         if (game.password && game.password !== password) {
             return NextResponse.json({ error: 'Invalid password for this bingo game.' }, { status: 401 });
         }
-
-        // 3. Upload the image to Supabase Storage
         const fileExt = proofFile.name.split('.').pop();
         const fileName = `${gameId}-${teamId}-${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabaseAdmin.storage
-            .from('bingo-proofs')
-            .upload(fileName, proofFile);
-
+        const { error: uploadError } = await supabaseAdmin.storage.from('bingo-proofs').upload(fileName, proofFile);
         if (uploadError) throw new Error(`Storage Error: ${uploadError.message}`);
+        const { data: { publicUrl } } = supabaseAdmin.storage.from('bingo-proofs').getPublicUrl(fileName);
+        const { error: insertError } = await supabaseAdmin.from('bingo_submissions').insert({
+            game_id: parseInt(gameId, 10), team_id: parseInt(teamId, 10), player_id: parseInt(playerId, 10),
+            tile_text: tileText, tile_position: parseInt(tilePosition, 10), proof_image_url: publicUrl, status: 'pending',
+        });
+        if (insertError) throw insertError;
 
-        // 4. Get the public URL of the uploaded image
-        const { data: { publicUrl } } = supabaseAdmin.storage
-            .from('bingo-proofs')
-            .getPublicUrl(fileName);
+        // --- MODIFIED NOTIFICATION LOGIC WITH DEBUGGING ---
+        try {
+            const playerQuery = supabaseAdmin
+                .from('player_details')
+                .select('username') // Use the corrected column name
+                .eq('wom_player_id', parseInt(playerId, 10))
+                .single();
 
-        // 5. Insert the submission record into the database
-        const { error: insertError } = await supabaseAdmin
-            .from('bingo_submissions')
-            .insert({
-                game_id: parseInt(gameId, 10),
-                team_id: parseInt(teamId, 10),
-                player_id: parseInt(playerId, 10),
-                tile_text: tileText,
-                tile_position: parseInt(tilePosition, 10),
-                proof_image_url: publicUrl,
-                status: 'pending',
+            const teamQuery = supabaseAdmin
+                .from('bingo_teams')
+                .select('team_name')
+                .eq('id', teamId)
+                .single();
+
+            const [playerRes, teamRes] = await Promise.all([playerQuery, teamQuery]);
+
+            const playerName = playerRes.data?.username || 'Unknown Player';
+            const teamName = teamRes.data?.team_name || 'Unknown Team';
+            const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+
+            const notificationPayload = {
+                submissionType: 'bingo',
+                playerName: playerName,
+                teamName: teamName,
+                gameName: game.name,
+                tileText: tileText,
+                proofImageUrl: publicUrl
+            };
+
+            // Define the URL separately for clear logging
+            const notificationUrl = `${siteUrl}/api/send-notification`;
+
+            console.log(`Bingo Route: Attempting to POST to: ${notificationUrl}`);
+            console.log("Bingo Route: Preparing to send this payload:", JSON.stringify(notificationPayload, null, 2));
+
+            // Use await to make the code wait for the fetch to complete
+            const notificationResponse = await fetch(notificationUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(notificationPayload)
             });
 
-        if (insertError) throw insertError;
+            // Check if the fetch was successful (status 200-299)
+            if (!notificationResponse.ok) {
+                // Log the failure details if it wasn't successful
+                const errorBody = await notificationResponse.text();
+                console.error(`ERROR: Notification dispatch to ${notificationUrl} failed!`);
+                console.error(`Status: ${notificationResponse.status} ${notificationResponse.statusText}`);
+                console.error(`Response Body: ${errorBody}`);
+            } else {
+                console.log("SUCCESS: Notification dispatch was successful.");
+            }
+
+        } catch (notificationError) {
+            console.error("CRITICAL ERROR: Failed to gather data for or dispatch bingo notification:", notificationError);
+        }
 
         return NextResponse.json({ message: 'Tile submitted successfully! An admin will review it shortly.' });
 

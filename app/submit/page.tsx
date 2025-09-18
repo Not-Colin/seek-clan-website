@@ -5,16 +5,8 @@ import Header from '@/components/Header';
 import { supabase } from '@/lib/supabaseClient';
 import { useSearchParams } from 'next/navigation';
 
-interface Bounty {
-  id: number;
-  name: string;
-  tier: 'low' | 'medium' | 'high';
-}
-
-interface ClanMember {
-  displayName: string;
-  id: number;
-}
+interface Bounty { id: number; name: string; tier: 'low' | 'medium' | 'high'; }
+interface ClanMember { displayName: string; id: number; }
 
 const pbCategories = [
   'Challenge Mode Chambers of Xeric', 'Chambers of Xeric', 'Fight Caves', 'Fortis Colosseum',
@@ -22,6 +14,7 @@ const pbCategories = [
 ];
 
 function SubmitFormContent() {
+  // ... (all your state variables remain the same) ...
   const searchParams = useSearchParams();
   const [submissionType, setSubmissionType] = useState('bounty');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('');
@@ -36,6 +29,7 @@ function SubmitFormContent() {
   const [isPasswordRequired, setIsPasswordRequired] = useState(false);
   const [userEnteredPassword, setUserEnteredPassword] = useState('');
 
+  // ... (useEffect and handleFileChange remain the same) ...
   useEffect(() => {
     const initializePage = async () => {
       const [bountyRes, settingsRes, clanDataRes] = await Promise.all([
@@ -43,7 +37,6 @@ function SubmitFormContent() {
         supabase.from('settings').select('is_password_required').eq('id', 1).single(),
         fetch('/api/get-cached-clan-data')
       ]);
-
       const { data: bountyData, error: bountyError } = bountyRes;
       if (bountyError) console.error('Error fetching bounties:', bountyError);
       else if (bountyData) {
@@ -61,32 +54,21 @@ function SubmitFormContent() {
           }
         }
       }
-
       const { data: settingsData, error: settingsError } = settingsRes;
       if (settingsError) console.error('Error fetching settings:', settingsError);
       else if (settingsData) setIsPasswordRequired(settingsData.is_password_required);
-
       if (clanDataRes.ok) {
         const clanData = await clanDataRes.json();
-        const members = clanData.rankedPlayers
-          .map((p: any) => ({ displayName: p.displayName, id: p.id }))
-          .filter((p: ClanMember) => p.id)
-          .sort((a: ClanMember, b: ClanMember) => a.displayName.localeCompare(b.displayName));
+        const members = clanData.rankedPlayers.map((p: any) => ({ displayName: p.displayName, id: p.id })).filter((p: ClanMember) => p.id).sort((a: ClanMember, b: ClanMember) => a.displayName.localeCompare(b.displayName));
         setClanMembers(members);
-        if (members.length > 0) {
-          setSelectedPlayerId(members[0].id.toString());
-        }
-      } else {
-        console.error('Error fetching clan roster');
-      }
+        if (members.length > 0) { setSelectedPlayerId(members[0].id.toString()); }
+      } else { console.error('Error fetching clan roster'); }
     };
     initializePage();
   }, [searchParams]);
-
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     setSelectedFile(null); setSubmitStatus({ message: '', type: '' });
-    const MAX_FILE_SIZE = 50 * 1024 * 1024;
-    const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       if (!allowedTypes.includes(file.type)) { setSubmitStatus({ message: "Invalid file type.", type: 'error' }); e.target.value = ''; return; }
@@ -94,6 +76,7 @@ function SubmitFormContent() {
       setSelectedFile(file);
     }
   };
+
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -117,36 +100,29 @@ function SubmitFormContent() {
       const selectedBountyObject = submissionType === 'bounty' ? bounties.find(b => b.id.toString() === selectedBountyId) : null;
 
       const rpcPayload = {
-          player_name_in: selectedPlayer.displayName,
-          wom_player_id_in: selectedPlayer.id,
-          submission_type_in: submissionType,
-          proof_image_url_in: urlData.publicUrl,
-          bounty_name_in: selectedBountyObject?.name || null,
-          bounty_tier_in: selectedBountyObject?.tier || null,
-          bounty_id_in: selectedBountyObject?.id || null,
-          pb_category_in: submissionType === 'personal_best' ? pbCategory : null,
-          pb_time_in: submissionType === 'personal_best' ? pbTime : null,
-          password_in: userEnteredPassword
+          player_name_in: selectedPlayer.displayName, wom_player_id_in: selectedPlayer.id,
+          submission_type_in: submissionType, proof_image_url_in: urlData.publicUrl,
+          bounty_name_in: selectedBountyObject?.name || null, bounty_tier_in: selectedBountyObject?.tier || null,
+          bounty_id_in: selectedBountyObject?.id || null, pb_category_in: submissionType === 'personal_best' ? pbCategory : null,
+          pb_time_in: submissionType === 'personal_best' ? pbTime : null, password_in: userEnteredPassword
       };
 
-      const { error: rpcError } = await supabase.rpc('submit_achievement', {
-        payload: rpcPayload
-      });
-
+      const { error: rpcError } = await supabase.rpc('submit_achievement', { payload: rpcPayload });
       if (rpcError) throw rpcError;
 
-      // --- THE FIX IS HERE: Call the new, dedicated submission notification route ---
-      fetch('/api/notify-submission', {
+      // --- Cleaned Up Notification Logic ---
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+      fetch(`${siteUrl}/api/send-notification`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+              submissionType: submissionType, // Will be 'bounty' or 'personal_best'
               playerName: selectedPlayer.displayName,
-              submissionType: submissionType,
               bountyName: selectedBountyObject?.name || null,
               pbCategory: submissionType === 'personal_best' ? pbCategory : null,
               proofImageUrl: urlData.publicUrl
           })
-      }).catch(err => console.error("Discord notification failed to send:", err));
+      }).catch(err => console.error("Discord notification dispatch failed:", err));
 
       setSubmitStatus({ message: 'Submission successful! Awaiting admin approval.', type: 'success' });
       const form = e.target as HTMLFormElement;
@@ -166,46 +142,8 @@ function SubmitFormContent() {
   };
 
   return (
-    <>
-      <Header />
-      <main className="px-6 py-8">
-        <div className="max-w-3xl mx-auto">
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-8">
-            <h1 className="text-3xl font-bold mb-6 text-center text-white">Submit Achievement</h1>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label htmlFor="playerName" className="block text-sm font-medium text-gray-300 mb-2">Player Name</label>
-                <select id="playerName" value={selectedPlayerId} onChange={(e) => setSelectedPlayerId(e.target.value)} required className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500">
-                  {clanMembers.length > 0 ? (
-                    clanMembers.map(member => (<option key={member.id} value={member.id}>{member.displayName}</option>))
-                  ) : (
-                    <option key="loading-option" disabled>Loading clan members...</option>
-                  )}
-                </select>
-              </div>
-              <div className="flex space-x-4"><label className="flex items-center"><input type="radio" value="bounty" checked={submissionType === 'bounty'} onChange={() => setSubmissionType('bounty')} className="form-radio h-4 w-4 text-orange-600 bg-slate-700 border-slate-600 focus:ring-orange-500" /><span className="ml-2 text-gray-300">Bounty</span></label><label className="flex items-center"><input type="radio" value="personal_best" checked={submissionType === 'personal_best'} onChange={() => setSubmissionType('personal_best')} className="form-radio h-4 w-4 text-orange-600 bg-slate-700 border-slate-600 focus:ring-orange-500" /><span className="ml-2 text-gray-300">Personal Best</span></label></div>
-              {submissionType === 'bounty' ? (
-                <div><label htmlFor="bounty" className="block text-sm font-medium text-gray-300 mb-2">Select Bounty</label><select id="bounty" value={selectedBountyId} onChange={(e) => setSelectedBountyId(e.target.value)} className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500">{bounties.length > 0 ? bounties.map(b => <option key={b.id} value={b.id}>{b.name}</option>) : <option>Loading bounties...</option>}</select></div>
-              ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <div><label htmlFor="pbCategory" className="block text-sm font-medium text-gray-300 mb-2">Category</label><select id="pbCategory" value={pbCategory} onChange={(e) => setPbCategory(e.target.value)} className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500">{pbCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</select></div>
-                  <div><label htmlFor="pbTime" className="block text-sm font-medium text-gray-300 mb-2">Time</label><input type="text" id="pbTime" value={pbTime} onChange={(e) => setPbTime(e.target.value)} required placeholder="e.g., 15:30.4" className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500" /></div>
-                </div>
-              )}
-              {isPasswordRequired && (
-                <div>
-                  <label htmlFor="submissionPassword" className="block text-sm font-medium text-gray-300 mb-2">Submission Password</label>
-                  <input type="password" id="submissionPassword" value={userEnteredPassword} onChange={(e) => setUserEnteredPassword(e.target.value)} required placeholder="Enter the clan submission password" className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500" />
-                </div>
-              )}
-              <div><label htmlFor="screenshot" className="block text-sm font-medium text-gray-300 mb-2">Screenshot Proof</label><input type="file" id="screenshot" onChange={handleFileChange} required accept="image/png, image/jpeg, image/gif, image/webp" className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-600/20 file:text-orange-300 hover:file:bg-orange-600/30" /></div>
-              <button type="submit" disabled={loading} className="w-full bg-orange-600 hover:bg-orange-700 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:bg-slate-600 disabled:cursor-not-allowed">{loading ? 'Submitting...' : 'Submit Achievement'}</button>
-              {submitStatus.message && (<div className={`text-center p-3 rounded-lg text-sm ${submitStatus.type === 'error' ? 'bg-red-500/20 text-red-300' : 'bg-green-500/20 text-green-300'}`}>{submitStatus.message}</div>)}
-            </form>
-          </div>
-        </div>
-      </main>
-    </>
+    // ... (Your JSX for the form remains exactly the same) ...
+    <> <Header /> <main className="px-6 py-8"> <div className="max-w-3xl mx-auto"> <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-8"> <h1 className="text-3xl font-bold mb-6 text-center text-white">Submit Achievement</h1> <form onSubmit={handleSubmit} className="space-y-6"> <div> <label htmlFor="playerName" className="block text-sm font-medium text-gray-300 mb-2">Player Name</label> <select id="playerName" value={selectedPlayerId} onChange={(e) => setSelectedPlayerId(e.target.value)} required className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500"> {clanMembers.length > 0 ? ( clanMembers.map(member => (<option key={member.id} value={member.id}>{member.displayName}</option>)) ) : ( <option key="loading-option" disabled>Loading clan members...</option> )} </select> </div> <div className="flex space-x-4"><label className="flex items-center"><input type="radio" value="bounty" checked={submissionType === 'bounty'} onChange={() => setSubmissionType('bounty')} className="form-radio h-4 w-4 text-orange-600 bg-slate-700 border-slate-600 focus:ring-orange-500" /><span className="ml-2 text-gray-300">Bounty</span></label><label className="flex items-center"><input type="radio" value="personal_best" checked={submissionType === 'personal_best'} onChange={() => setSubmissionType('personal_best')} className="form-radio h-4 w-4 text-orange-600 bg-slate-700 border-slate-600 focus:ring-orange-500" /><span className="ml-2 text-gray-300">Personal Best</span></label></div> {submissionType === 'bounty' ? ( <div><label htmlFor="bounty" className="block text-sm font-medium text-gray-300 mb-2">Select Bounty</label><select id="bounty" value={selectedBountyId} onChange={(e) => setSelectedBountyId(e.target.value)} className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500">{bounties.length > 0 ? bounties.map(b => <option key={b.id} value={b.id}>{b.name}</option>) : <option>Loading bounties...</option>}</select></div> ) : ( <div className="grid grid-cols-2 gap-4"> <div><label htmlFor="pbCategory" className="block text-sm font-medium text-gray-300 mb-2">Category</label><select id="pbCategory" value={pbCategory} onChange={(e) => setPbCategory(e.target.value)} className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500">{pbCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</select></div> <div><label htmlFor="pbTime" className="block text-sm font-medium text-gray-300 mb-2">Time</label><input type="text" id="pbTime" value={pbTime} onChange={(e) => setPbTime(e.target.value)} required placeholder="e.g., 15:30.4" className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500" /></div> </div> )} {isPasswordRequired && ( <div> <label htmlFor="submissionPassword" className="block text-sm font-medium text-gray-300 mb-2">Submission Password</label> <input type="password" id="submissionPassword" value={userEnteredPassword} onChange={(e) => setUserEnteredPassword(e.target.value)} required placeholder="Enter the clan submission password" className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500" /> </div> )} <div><label htmlFor="screenshot" className="block text-sm font-medium text-gray-300 mb-2">Screenshot Proof</label><input type="file" id="screenshot" onChange={handleFileChange} required accept="image/png, image/jpeg, image/gif, image/webp" className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-600/20 file:text-orange-300 hover:file:bg-orange-600/30" /></div> <button type="submit" disabled={loading} className="w-full bg-orange-600 hover:bg-orange-700 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:bg-slate-600 disabled:cursor-not-allowed">{loading ? 'Submitting...' : 'Submit Achievement'}</button> {submitStatus.message && (<div className={`text-center p-3 rounded-lg text-sm ${submitStatus.type === 'error' ? 'bg-red-500/20 text-red-300' : 'bg-green-500/20 text-green-300'}`}>{submitStatus.message}</div>)} </form> </div> </div> </main> </>
   );
 }
 
