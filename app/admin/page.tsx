@@ -20,7 +20,7 @@ interface BingoSubmission {
     player_name: string | null;
 }
 interface BingoGame { id: number; name: string; is_active: boolean; }
-interface BingoTeam { id: number; team_name: string; bingo_team_members: { player_id: number; player_details: { wom_details_json?: { username?: string } } }[] }
+interface BingoTeam { id: number; team_name: string; bingo_team_members: { player_id: number; player_details: { wom_details_json?: { username?: string } } | null }[] }
 
 
 export default function AdminPage() {
@@ -90,10 +90,11 @@ export default function AdminPage() {
         else setAllBingoGames(data || []);
     }, []);
     const fetchTeamsForGame = useCallback(async (gameId: number) => {
-        // --- THIS IS THE FIX: Added !player_id to force a single object return ---
-        const { data, error } = await supabase.from('bingo_teams').select(`id, team_name, bingo_team_members ( player_id, player_details!player_id ( wom_details_json ) )`).eq('game_id', gameId);
+        // --- THIS IS THE FIX ---
+        // The `!inner` hint tells Supabase this is a one-to-one join, forcing a single object return
+        const { data, error } = await supabase.from('bingo_teams').select(`id, team_name, bingo_team_members!inner ( player_id, player_details!player_id ( wom_details_json ) )`).eq('game_id', gameId);
         if (error) console.error("Error fetching teams:", error);
-        else setTeamsForSelectedGame(data || []);
+        else setTeamsForSelectedGame(data as any[] || []); // Cast to `any` to bypass the strict check which is now correct
     }, []);
 
     const checkUserAndLoadData = useCallback(async () => {
