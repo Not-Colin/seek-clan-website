@@ -357,7 +357,7 @@ export default function AdminPage() {
                                                 <div key={sub.id} className="bg-slate-700/50 p-4 rounded-lg flex items-center justify-between flex-wrap gap-4">
                                                     <div>
                                                         <p className="text-white font-bold"> {sub.player_name ?? 'Unknown Player'} <span className="text-gray-400 font-normal"> from </span> {sub.team_name ?? 'Unknown Team'} </p>
-                                                        <p className="text-gray-300 text-sm">Tile: "{sub.tile_text}"</p>
+                                                        <p className="text-gray-300 text-sm">Tile: &quot;{sub.tile_text}&quot;</p>
                                                     </div>
                                                     <div className="flex items-center space-x-4">
                                                         <a href={sub.proof_image_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 text-sm">View Proof</a>

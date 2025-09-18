@@ -21,7 +21,6 @@ export default function BingoIndexPage() {
             setLoading(true);
             setError(null);
             try {
-                // Fetch both active and archived games from their public API routes
                 const [activeRes, archivedRes] = await Promise.all([
                     fetch('/api/bingo/get-active-games'),
                     fetch('/api/bingo/get-archived-games')
@@ -70,7 +69,7 @@ export default function BingoIndexPage() {
                                 : 'text-gray-400 hover:text-gray-200'
                             }`}
                         >
-                            Active Bingo's
+                            Active Bingo&apos;s
                         </button>
                         <button
                             onClick={() => setActiveTab('archived')}
@@ -80,7 +79,7 @@ export default function BingoIndexPage() {
                                 : 'text-gray-400 hover:text-gray-200'
                             }`}
                         >
-                            Archived Bingo's
+                            Archived Bingo&apos;s
                         </button>
                     </div>
 
