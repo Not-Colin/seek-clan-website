@@ -1,11 +1,8 @@
-// app/api/admin/bingo/create-game/route.ts
-
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// --- IMPROVEMENT: Use generics for a type-safe shuffle function ---
 function shuffleArray<T>(array: T[]): T[] {
-    const newArray = [...array]; // Work on a copy to avoid mutating the original
+    const newArray = [...array];
     for (let i = newArray.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
@@ -13,12 +10,14 @@ function shuffleArray<T>(array: T[]): T[] {
     return newArray;
 }
 
-// --- IMPROVEMENT: Define an interface for the incoming request body ---
+// --- THIS IS THE FIX ---
+// Added the optional 'password' property to the interface.
 interface CreateGameRequest {
     name: string;
     game_type: 'standard' | 'lockout';
     board_size: number;
     tile_pool_text: string;
+    password?: string;
 }
 
 export async function POST(request: Request) {
@@ -50,8 +49,6 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: `Not enough unique tiles. A ${board_size}x${board_size} board requires at least ${requiredTiles} tiles. You provided ${tilePool.length}.` }, { status: 400 });
         }
 
-        // --- Database Operations ---
-
         // 3. Insert the new game into the 'bingo_games' table
         const { data: gameData, error: gameError } = await supabaseAdmin
             .from('bingo_games')
@@ -64,7 +61,7 @@ export async function POST(request: Request) {
                 is_active: true,
                 password: password || null,
             })
-            .select('id') // Only select the id we need
+            .select('id')
             .single();
 
         if (gameError) throw gameError;
@@ -77,7 +74,7 @@ export async function POST(request: Request) {
         const { data: teamsData, error: teamsError } = await supabaseAdmin
             .from('bingo_teams')
             .insert(teamsToCreate)
-            .select('id'); // Only select the ids
+            .select('id');
 
         if (teamsError) throw teamsError;
         if (!teamsData) throw new Error("Failed to create teams.");
