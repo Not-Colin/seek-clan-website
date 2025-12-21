@@ -7,23 +7,26 @@ import Header from '@/components/Header';
 import type { User } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 
+// ... (Keep your other interfaces: Bounty, Submission, ClanMember, Post, BingoSubmission) ...
 interface Bounty { id: number; name: string; tier: string; image_url: string; is_active: boolean; created_at: string; }
 interface Submission { id: number; created_at: string; player_name: string; submission_type: string; personal_best_category: string | null; proof_image_url: string; is_archived: boolean; status: string; bounty_tier: 'low' | 'medium' | 'high' | null; personal_best_time: string | null; trade_proof_url: string | null; bounty_id: number | null; bounties: { name: string; } | null; }
 interface ClanMember { id: number; displayName: string; }
 interface Post { id?: number; title: string; slug: string; content: string; excerpt: string; category: string; status: 'draft' | 'published' | 'featured'; created_at?: string; published_at?: string | null; }
-interface BingoSubmission {
+interface BingoSubmission { id: number; created_at: string; tile_text: string; proof_image_url: string; team_name: string | null; player_name: string | null; }
+
+// --- UPDATED INTERFACE ---
+interface BingoGame {
     id: number;
-    created_at: string;
-    tile_text: string;
-    proof_image_url: string;
-    team_name: string | null;
-    player_name: string | null;
+    name: string;
+    is_active: boolean;
+    start_time: string;
+    duration_days: number;
 }
-interface BingoGame { id: number; name: string; is_active: boolean; }
+
 interface BingoTeam { id: number; team_name: string; bingo_team_members: { player_id: number; player_details: { wom_details_json?: { username?: string } } | null }[] }
 
-
 export default function AdminPage() {
+    // ... (Keep existing state) ...
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('posts');
@@ -56,19 +59,25 @@ export default function AdminPage() {
     const [postStatus, setPostStatus] = useState('');
     const [isSyncingWom, setIsSyncingWom] = useState(false);
     const [womSyncStatus, setWomSyncStatus] = useState('');
+
+    // Bingo State
     const [newBingoName, setNewBingoName] = useState('');
     const [newBingoType, setNewBingoType] = useState('standard');
     const [newBingoSize, setNewBingoSize] = useState(5);
     const [newBingoTiles, setNewBingoTiles] = useState('');
+    const [newBingoPassword, setNewBingoPassword] = useState('');
     const [isCreatingBingo, setIsCreatingBingo] = useState(false);
     const [bingoStatus, setBingoStatus] = useState('');
     const [pendingBingoSubmissions, setPendingBingoSubmissions] = useState<BingoSubmission[]>([]);
     const [allBingoGames, setAllBingoGames] = useState<BingoGame[]>([]);
     const [selectedGameToManage, setSelectedGameToManage] = useState<BingoGame | null>(null);
     const [teamsForSelectedGame, setTeamsForSelectedGame] = useState<BingoTeam[]>([]);
-    const [newBingoPassword, setNewBingoPassword] = useState('');
     const [bingoSubTab, setBingoSubTab] = useState('create');
 
+    // --- NEW STATE FOR DURATION ---
+    const [newBingoDuration, setNewBingoDuration] = useState(7);
+
+    // ... (Keep existing Fetch functions for posts, bounties, etc) ...
     const fetchBounties = useCallback(async () => { const { data, error } = await supabase.from('bounties').select('*').order('created_at', { ascending: false }); if (error) console.error('Error fetching bounties:', error); else setBounties(data || []); }, []);
     const fetchPendingSubmissions = useCallback(async () => { const { data, error } = await supabase.from('submissions').select('*, bounties(name)').eq('status', 'pending').order('created_at', { ascending: true }); if (error) console.error('Error fetching pending submissions:', error); else setPendingSubmissions(data || []); }, []);
     const fetchPersonalBests = useCallback(async () => { const { data, error } = await supabase.from('submissions').select('*').eq('status', 'approved').eq('submission_type', 'personal_best').order('created_at', { ascending: false }); if (error) console.error('Error fetching PBs:', error); else setPersonalBests((data as Submission[]) || []); }, []);
@@ -77,69 +86,25 @@ export default function AdminPage() {
     const fetchAllClanMembers = useCallback(async () => { const { data, error } = await supabase.from('player_details').select('wom_player_id, wom_details_json').order('wom_details_json->>username', { ascending: true }); if (error) { console.error('Error fetching clan members:', error); } else { const members = data.map(p => ({ id: p.wom_player_id, displayName: p.wom_details_json?.username || 'Unknown' })).filter(p => p.displayName !== 'Unknown'); setAllClanMembers(members); if (members.length > 0) { setSelectedPlayerId(members[0].id.toString()); } } }, []);
     const fetchPosts = useCallback(async () => { const { data, error } = await supabase.from('posts').select('*').order('status', { ascending: false }).order('published_at', { ascending: false }); if (error) console.error("Error fetching posts:", error); else setPosts(data || []); }, []);
     const fetchPendingBingoSubmissions = useCallback(async () => {
-        // The query is now much simpler!
-        const { data, error } = await supabase
-            .from('bingo_submissions')
-            .select(`
-                id,
-                created_at,
-                tile_text,
-                proof_image_url,
-                player_name,
-                bingo_teams ( team_name )
-            `)
-            .eq('status', 'pending')
-            .order('created_at', { ascending: true });
-
-        if (error) {
-            console.error('Error fetching pending bingo submissions:', error);
-            setPendingBingoSubmissions([]);
-        } else {
-            // The mapping is also simpler and more direct.
-            const formattedData = data.map(sub => ({
-                id: sub.id,
-                created_at: sub.created_at,
-                tile_text: sub.tile_text,
-                proof_image_url: sub.proof_image_url,
-                team_name: (sub.bingo_teams as any)?.team_name ?? 'Unknown Team',
-                player_name: sub.player_name ?? 'Unknown Player',
-            }));
+        const { data, error } = await supabase.from('bingo_submissions').select(`id, created_at, tile_text, proof_image_url, player_name, bingo_teams ( team_name )`).eq('status', 'pending').order('created_at', { ascending: true });
+        if (error) { console.error('Error:', error); setPendingBingoSubmissions([]); } else {
+            const formattedData = data.map(sub => ({ id: sub.id, created_at: sub.created_at, tile_text: sub.tile_text, proof_image_url: sub.proof_image_url, team_name: (sub.bingo_teams as any)?.team_name ?? 'Unknown Team', player_name: sub.player_name ?? 'Unknown Player', }));
             setPendingBingoSubmissions(formattedData);
         }
     }, []);
+
+    // --- UPDATED FETCH FOR GAMES ---
     const fetchAllBingoGames = useCallback(async () => {
-        const { data, error } = await supabase.from('bingo_games').select('id, name, is_active').order('created_at', { ascending: false });
+        // Now fetching start_time and duration_days
+        const { data, error } = await supabase.from('bingo_games').select('id, name, is_active, start_time, duration_days').order('created_at', { ascending: false });
         if (error) console.error("Error fetching all bingo games:", error);
         else setAllBingoGames(data || []);
     }, []);
+
     const fetchTeamsForGame = useCallback(async (gameId: number) => {
-        const { data, error } = await supabase
-            .from('bingo_teams')
-            .select(`
-                id,
-                team_name,
-                bingo_team_members (
-                    player_id,
-                    player_details ( wom_details_json )
-                )
-            `)
-            .eq('game_id', gameId);
-
-        if (error) {
-            console.error("Error fetching teams:", error);
-            setTeamsForSelectedGame([]);
-            return;
-        }
-
-        const formattedData = data.map(team => ({
-            id: team.id,
-            team_name: team.team_name,
-            bingo_team_members: team.bingo_team_members.map((member: any) => ({
-                player_id: member.player_id,
-                player_details: member.player_details // The shape should now be correct
-            }))
-        }));
-
+        const { data, error } = await supabase.from('bingo_teams').select(`id, team_name, bingo_team_members ( player_id, player_details ( wom_details_json ) )`).eq('game_id', gameId);
+        if (error) { console.error("Error fetching teams:", error); setTeamsForSelectedGame([]); return; }
+        const formattedData = data.map(team => ({ id: team.id, team_name: team.team_name, bingo_team_members: team.bingo_team_members.map((member: any) => ({ player_id: member.player_id, player_details: member.player_details })) }));
         setTeamsForSelectedGame(formattedData);
     }, []);
 
@@ -156,6 +121,7 @@ export default function AdminPage() {
 
     useEffect(() => { checkUserAndLoadData(); }, [checkUserAndLoadData]);
 
+    // ... (Keep existing handlers for Posts, Bounties, PBs, etc.) ...
     const handleUpdateStatus = useCallback(async (submissionToUpdate: Submission, newStatus: 'approved' | 'rejected') => { const { error: submissionUpdateError } = await supabase.from('submissions').update({ status: newStatus }).eq('id', submissionToUpdate.id); if (submissionUpdateError) { alert(`Error updating submission: ${submissionUpdateError.message}`); return; } if (newStatus === 'approved' && submissionToUpdate.submission_type === 'bounty' && submissionToUpdate.bounties?.name) { const { error: bountyUpdateError } = await supabase.from('bounties').update({ is_active: false }).eq('name', submissionToUpdate.bounties.name); if (bountyUpdateError) alert(`Submission approved, but failed to auto-archive bounty: ${bountyUpdateError.message}`); } await Promise.all([fetchPendingSubmissions(), fetchBounties(), fetchApprovedBounties()]); if (newStatus === 'approved' && submissionToUpdate.submission_type === 'personal_best') await fetchPersonalBests(); }, [fetchBounties, fetchPendingSubmissions, fetchPersonalBests, fetchApprovedBounties]);
     const handleBountyFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => { setNewBountyFile(null); if (e.target.files && e.target.files.length > 0) { const file = e.target.files[0]; const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']; if (!allowedTypes.includes(file.type)) { alert("Invalid file type."); e.target.value = ''; return; } setNewBountyFile(file); } }, []);
     const handleBountySubmit = useCallback(async (e: FormEvent) => { e.preventDefault(); if (!newBountyFile || !newBountyName) { alert("Please provide a bounty name and select an image."); return; } setIsSubmittingBounty(true); try { const fileName = `${Date.now()}.${newBountyFile.name.split('.').pop()}`; const { error: uError } = await supabase.storage.from('bounty-images').upload(fileName, newBountyFile); if (uError) throw uError; const { data: urlData } = supabase.storage.from('bounty-images').getPublicUrl(fileName); const { error: iError } = await supabase.from('bounties').insert([{ name: newBountyName, tier: newBountyTier, image_url: urlData.publicUrl, is_active: true }]); if (iError) throw iError; setNewBountyName(''); setNewBountyTier('low'); setNewBountyFile(null); (e.target as HTMLFormElement).reset(); await fetchBounties(); } catch (error: any) { alert(`Error submitting bounty: ${error.message}`); } finally { setIsSubmittingBounty(false); } }, [newBountyFile, newBountyName, newBountyTier, fetchBounties]);
@@ -174,16 +140,26 @@ export default function AdminPage() {
     const handlePostSubmit = useCallback(async (e: FormEvent) => { e.preventDefault(); setPostStatus('Saving...'); const slug = generateSlug(currentPost.title); const postToSave = { ...currentPost, slug, status: isEditingPost ? currentPost.status : 'draft' }; let error; if (isEditingPost) { ({ error } = await supabase.from('posts').update(postToSave).eq('id', postToSave.id)); } else { ({ error } = await supabase.from('posts').insert(postToSave)); } if (error) { setPostStatus(`Error: ${error.message}`); } else { setPostStatus('Post saved successfully!'); setCurrentPost({ title: '', slug: '', content: '', excerpt: '', category: 'News', status: 'draft' }); setIsEditingPost(false); await fetchPosts(); setTimeout(() => setPostStatus(''), 3000); } }, [currentPost, isEditingPost, fetchPosts]);
     const handleSetStatus = useCallback(async (post: Post, newStatus: 'featured' | 'published' | 'draft') => { if (newStatus === 'featured') { const { error: unfeatureError } = await supabase.from('posts').update({ status: 'published' }).eq('category', post.category).eq('status', 'featured'); if (unfeatureError) { alert(`Error un-featuring old post: ${unfeatureError.message}`); return; } } const { error } = await supabase.from('posts').update({ status: newStatus, published_at: newStatus !== 'draft' && !post.published_at ? new Date().toISOString() : post.published_at }).eq('id', post.id); if (error) { alert(`Error updating post status: ${error.message}`); } else { await fetchPosts(); if (newStatus === 'featured') { try { const { data: { session } } = await supabase.auth.getSession(); if (!session) throw new Error("No active session to send notification."); const response = await fetch('/api/notify-discord', { method: 'POST', headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ title: post.title, excerpt: post.excerpt, slug: post.slug, category: post.category }) }); if (!response.ok) { const result = await response.json(); throw new Error(result.error || "Unknown error sending notification."); } } catch (notifyError: any) { alert(`Post was featured, but failed to send Discord notification: ${notifyError.message}`); } } } }, [fetchPosts]);
     const handlePostDelete = async (postId: number) => { if (window.confirm('Are you sure you want to delete this post?')) { const { error } = await supabase.from('posts').delete().eq('id', postId); if (error) alert(`Error deleting post: ${error.message}`); else await fetchPosts(); } };
+
+    // --- UPDATED CREATE GAME ---
     const handleCreateBingoGame = useCallback(async (e: FormEvent) => {
         e.preventDefault(); setIsCreatingBingo(true); setBingoStatus('Creating game...');
         if (newBingoTiles.split('\n').filter(Boolean).length < (newBingoSize * newBingoSize)) { setBingoStatus(`Error: Not enough tiles for a ${newBingoSize}x${newBingoSize} board.`); setIsCreatingBingo(false); return; }
+        // NEW VALIDATION
+        if (newBingoDuration < 0) { setBingoStatus('Error: Duration (days) cannot be negative.'); setIsCreatingBingo(false); return; }
+
         try {
             const { data: { session }, error: sessionError } = await supabase.auth.refreshSession(); if (sessionError || !session) throw new Error("Your session has expired. Please log in again.");
-            const response = await fetch('/api/admin/bingo/create-game', { method: 'POST', headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newBingoName, game_type: newBingoType, board_size: newBingoSize, tile_pool_text: newBingoTiles, password: newBingoPassword }) });
+            const response = await fetch('/api/admin/bingo/create-game', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newBingoName, game_type: newBingoType, board_size: newBingoSize, tile_pool_text: newBingoTiles, password: newBingoPassword, duration_days: newBingoDuration })
+            });
             const result = await response.json(); if (!response.ok) throw new Error(result.error || 'An unknown error occurred.');
-            setBingoStatus(result.message); setNewBingoName(''); setNewBingoTiles(''); setNewBingoPassword(''); await fetchAllBingoGames();
+            setBingoStatus(result.message); setNewBingoName(''); setNewBingoTiles(''); setNewBingoPassword(''); setNewBingoDuration(7); await fetchAllBingoGames();
         } catch (error: any) { setBingoStatus(`Error: ${error.message}`); } finally { setIsCreatingBingo(false); setTimeout(() => setBingoStatus(''), 10000); }
-    }, [newBingoName, newBingoType, newBingoSize, newBingoTiles, newBingoPassword, fetchAllBingoGames]);
+    }, [newBingoName, newBingoType, newBingoSize, newBingoTiles, newBingoPassword, newBingoDuration, fetchAllBingoGames]);
+
     const handleManageBingoSubmission = useCallback(async (submissionId: number, newStatus: 'approved' | 'rejected') => {
         try {
             const { data: { session }, error: sessionError } = await supabase.auth.refreshSession(); if (sessionError || !session) throw new Error("Your session has expired. Please log in again.");
@@ -229,6 +205,34 @@ export default function AdminPage() {
         } catch (error: any) { alert(`Error: ${error.message}`); }
     }, [fetchAllBingoGames]);
 
+    // --- NEW: MANUAL CLOSE HANDLER ---
+    const handleCloseBingoManually = useCallback(async (gameId: number) => {
+        if (!window.confirm("Are you sure you want to CLOSE this bingo game immediately? This will set it to inactive.")) return;
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) throw new Error("Session not found. Please log in again.");
+
+            const response = await fetch('/api/admin/bingo/close-game-manual', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ gameId })
+            });
+
+            if (!response.ok) {
+                const result = await response.json();
+                throw new Error(result.error || "Failed to close game manually.");
+            }
+
+            alert(`Bingo game with ID ${gameId} successfully closed.`);
+            setSelectedGameToManage(null);
+            setTeamsForSelectedGame([]);
+            await fetchAllBingoGames();
+        } catch (error: any) {
+            alert(`Error: ${error.message}`);
+        }
+    }, [fetchAllBingoGames]);
+
     if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Loading...</div>;
     if (!user) return <AdminLogin onLogin={checkUserAndLoadData} />;
 
@@ -241,12 +245,15 @@ export default function AdminPage() {
                     <div className="flex border-b border-slate-700 mb-6 overflow-x-auto">
                         <button onClick={() => setActiveTab('posts')} className={`px-4 py-3 text-sm font-medium whitespace-nowrap ${activeTab === 'posts' ? 'text-orange-400 border-b-2 border-orange-400' : 'text-gray-400'}`}>Manage Posts</button>
                         <button onClick={() => setActiveTab('bingo')} className={`px-4 py-3 text-sm font-medium whitespace-nowrap ${activeTab === 'bingo' ? 'text-orange-400 border-b-2 border-orange-400' : 'text-gray-400'}`}>Manage Bingos</button>
+                        {/* ... (Other Tabs) ... */}
                         <button onClick={() => setActiveTab('post')} className={`px-4 py-3 text-sm font-medium whitespace-nowrap ${activeTab === 'post' ? 'text-orange-400 border-b-2 border-orange-400' : 'text-gray-400'}`}>Post Bounties</button>
                         <button onClick={() => setActiveTab('validate')} className={`px-4 py-3 text-sm font-medium whitespace-nowrap ${activeTab === 'validate' ? 'text-orange-400 border-b-2 border-orange-400' : 'text-gray-400'}`}>Validate Bounties</button>
                         <button onClick={() => setActiveTab('pbs')} className={`px-4 py-3 text-sm font-medium whitespace-nowrap ${activeTab === 'pbs' ? 'text-orange-400 border-b-2 border-orange-400' : 'text-gray-400'}`}>Manage PBs</button>
                         <button onClick={() => setActiveTab('tradelog')} className={`px-4 py-3 text-sm font-medium whitespace-nowrap ${activeTab === 'tradelog' ? 'text-orange-400 border-b-2 border-orange-400' : 'text-gray-400'}`}>Trade Log</button>
                         <button onClick={() => setActiveTab('settings')} className={`px-4 py-3 text-sm font-medium whitespace-nowrap ${activeTab === 'settings' ? 'text-orange-400 border-b-2 border-orange-400' : 'text-gray-400'}`}>Site Settings</button>
                     </div>
+
+                    {/* ... (Tab Content for Posts) ... */}
                     {activeTab === 'posts' && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div className="md:col-span-1 bg-slate-800/50 rounded-xl p-6">
@@ -307,6 +314,22 @@ export default function AdminPage() {
                                             <label htmlFor="bingoPassword" className="block text-sm font-medium text-gray-300 mb-1">Game Password (Optional)</label>
                                             <input type="text" id="bingoPassword" value={newBingoPassword} onChange={(e) => setNewBingoPassword(e.target.value)} className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white" placeholder="Password for tile submissions" />
                                         </div>
+
+                                        {/* --- NEW DURATION INPUT --- */}
+                                        <div>
+                                            <label htmlFor="bingoDuration" className="block text-sm font-medium text-gray-300 mb-1">Duration (Days, 0 for no automatic limit)</label>
+                                            <input
+                                                type="number"
+                                                id="bingoDuration"
+                                                value={newBingoDuration}
+                                                onChange={(e) => setNewBingoDuration(Number(e.target.value))}
+                                                min="0"
+                                                required
+                                                className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white"
+                                                placeholder="e.g., 7 for 7 days, 0 for unlimited"
+                                            />
+                                        </div>
+
                                         <div>
                                             <label htmlFor="bingoTiles" className="block text-sm font-medium text-gray-300 mb-1">Tile Pool (One per line)</label>
                                             <textarea id="bingoTiles" value={newBingoTiles} onChange={(e) => setNewBingoTiles(e.target.value)} required rows={10} className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white" placeholder="Obtain a Draconic Visage&#10;Complete the Fight Caves&#10;Receive a pet drop..."></textarea>
@@ -341,6 +364,23 @@ export default function AdminPage() {
                                     </div>
                                     {selectedGameToManage && (
                                         <>
+                                            {/* --- NEW STATUS CARD --- */}
+                                            <div className="bg-slate-700/50 p-4 rounded-lg mb-6">
+                                                <h4 className="font-bold text-orange-400 mb-2">Game Status & Duration:</h4>
+                                                <p className="text-white text-sm">Status: <span className={`${selectedGameToManage.is_active ? 'text-green-400' : 'text-yellow-400'}`}>{selectedGameToManage.is_active ? 'Active' : 'Archived'}</span></p>
+                                                <p className="text-white text-sm">Started: {new Date(selectedGameToManage.start_time).toLocaleString()}</p>
+                                                <p className="text-white text-sm">
+                                                    Duration: {selectedGameToManage.duration_days === 0
+                                                        ? 'No automatic time limit'
+                                                        : `${selectedGameToManage.duration_days} day${selectedGameToManage.duration_days === 1 ? '' : 's'}`}
+                                                </p>
+                                                {selectedGameToManage.duration_days > 0 && (
+                                                    <p className="text-white text-sm">
+                                                        Expected End: {new Date(new Date(selectedGameToManage.start_time).getTime() + selectedGameToManage.duration_days * 24 * 60 * 60 * 1000).toLocaleString()}
+                                                    </p>
+                                                )}
+                                            </div>
+
                                             <div className="space-y-6 mt-6">
                                                 {teamsForSelectedGame.map(team => (
                                                     <div key={team.id} className="bg-slate-700/50 p-4 rounded-lg">
@@ -375,7 +415,13 @@ export default function AdminPage() {
                                                         <button onClick={() => handleSetGameStatus(selectedGameToManage.id, false)} className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg">
                                                             Archive This Game
                                                         </button>
-                                                        <p className="text-xs text-center text-gray-500 mt-2">This will remove the game from the public bingo page.</p>
+                                                        {/* --- NEW MANUAL CLOSE BUTTON --- */}
+                                                        <button onClick={() => handleCloseBingoManually(selectedGameToManage.id)} className="w-full mt-4 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">
+                                                            Close Bingo Game Manually Now
+                                                        </button>
+                                                        <p className="text-xs text-center text-gray-500 mt-2">
+                                                            Archiving or manually closing will immediately set the game to inactive.
+                                                        </p>
                                                     </>
                                                 ) : (
                                                     <div className="space-y-4">
@@ -421,6 +467,7 @@ export default function AdminPage() {
                         </div>
                     )}
                     {activeTab === 'post' && ( <div className="grid grid-cols-1 md:grid-cols-3 gap-6"> <div className="md:col-span-1"><div className="bg-slate-800/50 rounded-xl p-6"><h3 className="text-lg font-semibold text-white mb-4">Add New Bounty</h3><form onSubmit={handleBountySubmit} className="space-y-4"><div><label className="block text-sm font-medium text-gray-300 mb-1">Bounty Name</label><input type="text" value={newBountyName} onChange={(e) => setNewBountyName(e.target.value)} required className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white" /></div><div><label className="block text-sm font-medium text-gray-300 mb-1">Tier</label><select value={newBountyTier} onChange={(e) => setNewBountyTier(e.target.value)} className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white"><option value="low">Low (2M GP)</option><option value="medium">Medium (5M GP)</option><option value="high">High (10M GP)</option></select></div><div><label className="block text-sm font-medium text-gray-300 mb-1">Bounty Image</label><input type="file" onChange={handleBountyFileChange} required accept="image/png, image/jpeg, image/gif, image/webp" className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-orange-600/20 file:text-orange-300" /></div><button type="submit" disabled={isSubmittingBounty} className="w-full bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-4 rounded-lg disabled:bg-slate-600">{isSubmittingBounty ? 'Posting...' : 'Post Bounty'}</button></form></div></div> <div className="md:col-span-2"><div className="bg-slate-800/50 rounded-xl p-6"><h3 className="text-lg font-semibold text-white mb-4">Manage Existing Bounties</h3><div className="space-y-3">{bounties.map(bounty => (<div key={bounty.id} className="bg-slate-700/50 p-3 rounded-lg flex items-center justify-between"><div><p className={`font-bold ${bounty.is_active ? 'text-white' : 'text-gray-500 line-through'}`}>{bounty.name}</p><p className="text-sm text-gray-400 capitalize">{bounty.tier} Tier</p></div><div className="flex items-center space-x-2"><button onClick={() => handleBountyArchive(bounty.id, bounty.is_active)} className={`px-3 py-1 text-sm rounded-md ${bounty.is_active ? 'bg-orange-600 hover:bg-orange-700 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}`}>{bounty.is_active ? 'Archive' : 'Re-activate'}</button><button onClick={() => handleBountyDelete(bounty.id)} className="px-3 py-1 text-sm rounded-md bg-red-600 hover:bg-red-700 text-white">Delete</button></div></div>))}</div></div></div> </div> )}
+                    {/* ... (Other Tabs Content) ... */}
                     {activeTab === 'validate' && ( <div className="bg-slate-800/50 rounded-xl p-6"><h3 className="text-lg font-semibold text-white mb-4">Pending Reviews</h3>{pendingSubmissions.length === 0 ? <p className="text-gray-400">No pending submissions.</p> : (<div className="space-y-4">{pendingSubmissions.map((sub) => (<div key={sub.id} className="bg-slate-700/50 p-4 rounded-lg flex items-center justify-between flex-wrap gap-4"><div><p className="text-white font-bold">{sub.player_name}</p><p className="text-gray-300 text-sm">{sub.submission_type === 'bounty' ? `Bounty: ${sub.bounties?.name ?? 'N/A'}` : `PB: ${sub.personal_best_category}`}</p></div><div className="flex items-center space-x-4"><a href={sub.proof_image_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 text-sm">View Proof</a><button onClick={() => handleUpdateStatus(sub, 'approved')} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md text-sm">Approve</button><button onClick={() => handleUpdateStatus(sub, 'rejected')} className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-md text-sm">Reject</button></div></div>))}</div>)}</div> )}
                     {activeTab === 'pbs' && ( <div className="bg-slate-800/50 rounded-xl p-6"><h3 className="text-lg font-semibold text-white mb-4">Manage Personal Best Records</h3><div className="space-y-3">{personalBests.length === 0 ? <p className="text-gray-400">No approved personal bests yet.</p> : personalBests.map(pb => (<div key={pb.id} className="bg-slate-700/50 p-3 rounded-lg flex items-center justify-between"><div><p className={`font-bold ${!pb.is_archived ? 'text-white' : 'text-gray-500 line-through'}`}>{pb.player_name} - {pb.personal_best_category}</p><p className="text-sm text-orange-400">Time: {pb.personal_best_time}</p></div><button onClick={() => handlePbArchive(pb.id, pb.is_archived)} className={`px-3 py-1 text-sm rounded-md ${!pb.is_archived ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}>{!pb.is_archived ? 'Archive' : 'Re-activate'}</button></div>))}</div></div> )}
                     {activeTab === 'tradelog' && ( <div className="bg-slate-800/50 rounded-xl p-6"><h3 className="text-lg font-semibold text-white mb-4">Manage Bounty Payouts</h3><p className="text-sm text-gray-400 mb-6">A list of all approved bounties. Log, update, or remove trade proof screenshots.</p>{approvedBounties.length === 0 ? <p className="text-gray-400">No approved bounties found.</p> : (<div className="space-y-6">{approvedBounties.map((submission) => (<div key={submission.id} className="bg-slate-700/50 p-4 rounded-lg"><p className="text-white font-bold">{submission.player_name}</p><p className="text-gray-300 text-sm">Bounty: {submission.bounties?.name ?? 'N/A'}</p>{submission.trade_proof_url ? (<div className="mt-4 flex flex-col sm:flex-row items-center gap-4"><a href={submission.trade_proof_url} target="_blank" rel="noopener noreferrer" className="flex-grow w-full text-center sm:text-left text-blue-400 hover:underline">View Logged Trade Proof</a><button onClick={() => handleTradeProofRemove(submission)} disabled={isLoggingTrade && selectedSubmissionId === submission.id} className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg disabled:bg-slate-600">{isLoggingTrade && selectedSubmissionId === submission.id ? 'Removing...' : 'Remove Proof'}</button></div>) : (<form onSubmit={(e) => handleTradeLogSubmit(e, submission.id)} className="mt-4 flex flex-col sm:flex-row items-center gap-4"><input type="file" onChange={(e) => { setSelectedSubmissionId(submission.id); setTradeProofFile(e.target.files ? e.target.files[0] : null); }} required accept="image/*" className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-blue-600/20 file:text-blue-300"/><button type="submit" disabled={isLoggingTrade && selectedSubmissionId === submission.id} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg disabled:bg-slate-600 whitespace-nowrap">{isLoggingTrade && selectedSubmissionId === submission.id ? 'Logging...' : 'Log Trade'}</button></form>)}</div>))}</div>)}</div> )}

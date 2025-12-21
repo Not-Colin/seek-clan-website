@@ -10,18 +10,17 @@ function shuffleArray<T>(array: T[]): T[] {
     return newArray;
 }
 
-// --- THIS IS THE FIX ---
-// Added the optional 'password' property to the interface.
+// Fixed Interface
 interface CreateGameRequest {
     name: string;
     game_type: 'standard' | 'lockout';
     board_size: number;
     tile_pool_text: string;
     password?: string;
+    duration_days: number; // Added colon
 }
 
 export async function POST(request: Request) {
-    // 1. Authenticate the admin user
     const authHeader = request.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -29,27 +28,25 @@ export async function POST(request: Request) {
     const token = authHeader.split(' ')[1];
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
     const { data: { user } } = await supabase.auth.getUser(token);
-    if (!user) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
     try {
-        const { name, game_type, board_size, tile_pool_text, password } = await request.json() as CreateGameRequest;
+        const { name, game_type, board_size, tile_pool_text, password, duration_days } = await request.json() as CreateGameRequest;
 
-        // 2. Validate the input
-        if (!name || !game_type || !board_size || !tile_pool_text) {
-            return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 });
+        // Added duration check
+        if (!name || !game_type || !board_size || !tile_pool_text || duration_days === undefined || duration_days < 0) {
+            return NextResponse.json({ error: 'Missing required fields or invalid duration.' }, { status: 400 });
         }
 
         const tilePool = tile_pool_text.split('\n').map(tile => tile.trim()).filter(Boolean);
         const requiredTiles = board_size * board_size;
 
         if (tilePool.length < requiredTiles) {
-            return NextResponse.json({ error: `Not enough unique tiles. A ${board_size}x${board_size} board requires at least ${requiredTiles} tiles. You provided ${tilePool.length}.` }, { status: 400 });
+            return NextResponse.json({ error: `Not enough unique tiles. Required: ${requiredTiles}. Provided: ${tilePool.length}.` }, { status: 400 });
         }
 
-        // 3. Insert the new game into the 'bingo_games' table
         const { data: gameData, error: gameError } = await supabaseAdmin
             .from('bingo_games')
             .insert({
@@ -60,29 +57,21 @@ export async function POST(request: Request) {
                 created_by: user.id,
                 is_active: true,
                 password: password || null,
+                start_time: new Date().toISOString(), // Save Start Time
+                duration_days: duration_days,        // Save Duration
             })
             .select('id')
             .single();
 
         if (gameError) throw gameError;
-        if (!gameData) throw new Error("Failed to create game and retrieve its data.");
 
         const newGameId = gameData.id;
-
-        // 4. Create two default teams for this new game.
         const teamsToCreate = [{ game_id: newGameId, team_name: 'Team 1' }, { game_id: newGameId, team_name: 'Team 2' }];
-        const { data: teamsData, error: teamsError } = await supabaseAdmin
-            .from('bingo_teams')
-            .insert(teamsToCreate)
-            .select('id');
-
+        const { data: teamsData, error: teamsError } = await supabaseAdmin.from('bingo_teams').insert(teamsToCreate).select('id');
         if (teamsError) throw teamsError;
-        if (!teamsData) throw new Error("Failed to create teams.");
 
-        // 5. Shuffle the tile pool and generate the board layout
         const shuffledTiles = shuffleArray(tilePool);
         const boardTiles = shuffledTiles.slice(0, requiredTiles);
-
         const boardJson = boardTiles.map((tileText, index) => ({
             text: tileText,
             position: index,
@@ -92,7 +81,6 @@ export async function POST(request: Request) {
             claimed_at: null,
         }));
 
-        // 6. Create a board for each team
         const boardsToCreate = teamsData.map((team: { id: number }) => ({
             team_id: team.id,
             game_id: newGameId,
@@ -102,10 +90,9 @@ export async function POST(request: Request) {
         const { error: boardsError } = await supabaseAdmin.from('bingo_boards').insert(boardsToCreate);
         if (boardsError) throw boardsError;
 
-        return NextResponse.json({ message: `Successfully created Bingo game "${name}" with ${teamsData.length} teams!` });
+        return NextResponse.json({ message: `Successfully created Bingo game "${name}"!` });
 
     } catch (error: any) {
-        console.error('Bingo Game Creation API Error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

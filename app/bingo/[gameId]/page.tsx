@@ -4,8 +4,18 @@ import { useState, useEffect, FormEvent, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Header from '@/components/Header';
 
-// --- Interfaces (Corrected to use `username`) ---
-interface BingoGame { id: number; name: string; game_type: 'standard' | 'lockout'; board_size: number; is_active: boolean; bingo_teams: BingoTeam[]; shared_board?: { tiles: BingoTileData[] }; }
+// --- Interfaces ---
+interface BingoGame {
+    id: number;
+    name: string;
+    game_type: 'standard' | 'lockout';
+    board_size: number;
+    is_active: boolean;
+    start_time: string;      // NEW
+    duration_days: number;   // NEW
+    bingo_teams: BingoTeam[];
+    shared_board?: { tiles: BingoTileData[] };
+}
 interface BingoTileData { text: string; position: number; status: 'incomplete' | 'approved'; claimed_by_team: number | null; claimed_by_player: string | null; proof_image_url?: string; }
 interface Player { wom_player_id: number; displayName: string; }
 interface BingoTeam { id: number; team_name: string; score: number; bingo_team_members: { player_details: { wom_player_id: number; wom_details_json: { username: string } } }[]; board?: { tiles: BingoTileData[] } | null; }
@@ -26,6 +36,7 @@ const BingoTile = ({ tile, teamColors, isGameActive, onIncompleteClick }: { tile
     };
     return ( <button onClick={handleClick} disabled={!isClickable} className={`aspect-square p-2 border rounded-md flex flex-col justify-center items-center text-center transition-all duration-300 ${isCompleted || !isGameActive ? 'border-transparent' : 'border-slate-600'} ${tileBgColor} ${hoverAndCursor}`}> <p className={`text-sm font-medium ${isCompleted || isGameActive ? 'text-white' : 'text-slate-400'}`}>{tile.text}</p> {isCompleted && tile.claimed_by_player && ( <p className="text-xs text-slate-300 mt-1 font-bold">by {tile.claimed_by_player}</p> )} </button> );
 };
+
 const SubmissionModal = ({ tile, game, allPlayers, onClose, onSubmitSuccess }: { tile: BingoTileData; game: BingoGame; allPlayers: Player[]; onClose: () => void; onSubmitSuccess: (msg: string) => void; }) => {
     const [proofFile, setProofFile] = useState<File | null>(null); const [isSubmitting, setIsSubmitting] = useState(false); const [error, setError] = useState(''); const [selectedPlayerId, setSelectedPlayerId] = useState<string>(''); const [password, setPassword] = useState('');
     const handleSubmit = async (e: FormEvent) => {
@@ -34,25 +45,15 @@ const SubmissionModal = ({ tile, game, allPlayers, onClose, onSubmitSuccess }: {
         const playerTeam = game.bingo_teams.find(team => team.bingo_team_members.some(m => m.player_details.wom_player_id === Number(selectedPlayerId)));
         if (!playerTeam) { setError('The selected player is not on a team for this game.'); return; }
 
-        // --- START OF NEW CODE ---
-        // Find the full player object from the list to get their display name
         const selectedPlayer = allPlayers.find(p => p.wom_player_id.toString() === selectedPlayerId);
-        if (!selectedPlayer) {
-            setError('An error occurred while finding player details. Please refresh.');
-            return;
-        }
-        // --- END OF NEW CODE ---
+        if (!selectedPlayer) { setError('An error occurred while finding player details. Please refresh.'); return; }
 
         setIsSubmitting(true); setError(''); const formData = new FormData();
         formData.append('proofFile', proofFile);
         formData.append('gameId', String(game.id));
         formData.append('teamId', String(playerTeam.id));
         formData.append('playerId', selectedPlayerId);
-
-        // --- THE CRITICAL ADDITION ---
-        // Add the player's actual name to the form data
         formData.append('playerName', selectedPlayer.displayName);
-
         formData.append('tileText', tile.text);
         formData.append('tilePosition', String(tile.position));
         formData.append('password', password);
@@ -69,6 +70,8 @@ export default function BingoPage() {
     const [activeTeamId, setActiveTeamId] = useState<number | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedTile, setSelectedTile] = useState<BingoTileData | null>(null);
+    // State to handle date strings after hydration to avoid mismatches
+    const [dateString, setDateString] = useState<string | null>(null);
 
     useEffect(() => {
         if (!gameId) return;
@@ -80,6 +83,13 @@ export default function BingoPage() {
                 if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Failed to fetch game data.'); }
                 const data: BingoGame = await response.json();
                 setGameData(data);
+
+                // NEW: Set the date string for display
+                if (data.duration_days > 0 && data.start_time) {
+                    const endTime = new Date(new Date(data.start_time).getTime() + data.duration_days * 24 * 60 * 60 * 1000);
+                    setDateString(endTime.toLocaleString());
+                }
+
                 if (isInitialLoad && data.bingo_teams && data.bingo_teams.length > 0) {
                     setActiveTeamId(data.bingo_teams[0].id);
                 }
@@ -134,12 +144,20 @@ export default function BingoPage() {
             <main className="px-6 py-8">
                 <div className="max-w-7xl mx-auto">
                     <h1 className="text-3xl font-bold mb-2 text-center text-white">{gameData.name}</h1>
-                    <p className="text-center text-orange-400 capitalize mb-8">{gameData.game_type} Bingo</p>
+                    <p className="text-center text-orange-400 capitalize mb-4">{gameData.game_type} Bingo</p>
 
+                    {/* --- NEW TIME LIMIT INFO --- */}
+                    {gameData.duration_days > 0 && dateString && (
+                        <p className={`text-center text-sm mb-6 ${gameData.is_active ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {gameData.is_active ? `Event ends: ${dateString}` : `Event ended: ${dateString}`}
+                        </p>
+                    )}
+
+                    {/* --- ARCHIVED STATUS BANNER --- */}
                     {!gameData.is_active && (
-                        <div className="max-w-4xl mx-auto mb-6 p-4 bg-yellow-900/50 border border-yellow-700 rounded-lg text-center">
-                            <h3 className="font-bold text-yellow-300 text-lg">This Bingo has been archived.</h3>
-                            <p className="text-yellow-400 text-sm">No new tiles can be submitted.</p>
+                        <div className="max-w-4xl mx-auto mb-8 p-4 bg-yellow-900/40 border border-yellow-700/50 rounded-lg text-center backdrop-blur-sm">
+                            <h3 className="font-bold text-yellow-300 text-lg">This Bingo has ended.</h3>
+                            <p className="text-yellow-400/80 text-sm">No new tiles can be submitted, but you can still view the results.</p>
                         </div>
                     )}
 

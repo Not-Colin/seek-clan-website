@@ -1,3 +1,5 @@
+// app/api/bingo/[gameId]/route.ts
+
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -15,6 +17,7 @@ export async function GET(
         return NextResponse.json({ error: 'Invalid game ID in URL' }, { status: 400 });
     }
 
+    // Use service role key to ensure we get all data needed for the board
     const supabaseAdmin = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -25,13 +28,14 @@ export async function GET(
             .from('bingo_games')
             .select(`
                 id, name, game_type, board_size, is_active,
+                start_time, duration_days,
                 bingo_teams (
                     id, team_name, score,
                     bingo_team_members (
                         player_details ( wom_player_id, wom_details_json )
                     )
                 )
-            `)
+            `) // Added start_time and duration_days above
             .eq('id', gameId)
             .order('id', { foreignTable: 'bingo_teams', ascending: true })
             .single();

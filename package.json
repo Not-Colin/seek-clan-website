@@ -14,7 +14,7 @@
     "@tailwindcss/typography": "^0.5.16",
     "@vercel/edge-config": "^1.4.0",
     "@wise-old-man/utils": "^3.3.14",
-    "next": "^16.1.0-canary.12",
+    "next": "15.5.9",
     "puppeteer": "^24.19.0",
     "puppeteer-core": "^24.19.0",
     "react": "^18.3.1",
