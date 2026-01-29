@@ -46,7 +46,7 @@ export async function POST(request: Request) {
                 {
                     wom_player_id: member.player.id,
                     wom_details_json: detailsWithRole,
-                    updated_at: new Date().toISOString()
+                    last_updated: new Date().toISOString()
                 },
                 { onConflict: 'wom_player_id' }
             );

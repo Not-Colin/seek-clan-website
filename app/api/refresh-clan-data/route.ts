@@ -39,7 +39,7 @@ export async function POST(request: Request) {
         const womGroupIdString = process.env.WOM_GROUP_ID;
         const WOM_GROUP_ID = parseInt(womGroupIdString?.trim() || '0', 10);
         if (isNaN(WOM_GROUP_ID) || WOM_GROUP_ID !== 5622) throw new Error("Invalid WOM_GROUP_ID");
-        const groupRes = await fetch(`https://api.wiseoldman.net/v2/groups/${WOM_GROUP_ID}`);
+        const groupRes = await fetch(`https://api.wiseoldman.net/v2/groups/${WOM_GROUP_ID}`, { cache: 'no-store' });
         if (!groupRes.ok) throw new Error(`Failed to fetch current member list from WOM: ${groupRes.status}`);
         const groupData = await groupRes.json();
         if (!Array.isArray(groupData.memberships)) throw new Error("Invalid WOM membership data");
