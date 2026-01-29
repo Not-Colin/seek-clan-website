@@ -147,19 +147,22 @@ export default function AdminPage() {
                 // --- THE LOOP ---
                 while (!isComplete && nextIndex !== null) {
 
-                    // Renamed 'response' to 'syncResponse' to fix TypeScript error
-                    const syncResponse = await fetch('/api/sync-wom-group-data', {
+                    // 1. Define payload outside the fetch to prevent TS scope errors
+                    const payload = { startIndex: nextIndex };
+
+                    // 2. Explicitly type the response object
+                    const res: Response = await fetch('/api/sync-wom-group-data', {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${session.access_token}`,
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ startIndex: nextIndex })
+                        body: JSON.stringify(payload)
                     });
 
-                    const result = await syncResponse.json();
+                    const result = await res.json();
 
-                    if (!syncResponse.ok) {
+                    if (!res.ok) {
                         throw new Error(result.error || 'An unknown error occurred.');
                     }
 
