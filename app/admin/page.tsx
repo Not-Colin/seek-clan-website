@@ -135,7 +135,7 @@ export default function AdminPage() {
     const handleCalculateRanks = useCallback(async () => { setIsRefreshing(true); setRefreshStatus('Calculating ranks...'); try { const { data: { session }, error: sessionError } = await supabase.auth.refreshSession(); if (sessionError || !session) throw new Error("Your session has expired. Please log in again."); const response = await fetch('/api/refresh-clan-data', { method: 'POST', headers: { 'Authorization': `Bearer ${session.access_token}` } }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'An unknown error occurred.'); setRefreshStatus(result.message); } catch (error: any) { setRefreshStatus(`Error: ${error.message}`); if (error.message.includes("session has expired")) await handleLogout(); } finally { setIsRefreshing(false); setTimeout(() => setRefreshStatus(''), 5000); } }, [handleLogout]);
     const handleWomGroupSync = useCallback(async () => {
             setIsSyncingWom(true);
-            setWomSyncStatus('Initializing rate-limited sync...');
+            setWomSyncStatus('Initializing robust sync...');
 
             try {
                 const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
@@ -144,11 +144,12 @@ export default function AdminPage() {
                 let nextIndex: number | null = 0;
                 let isComplete = false;
 
-                // --- THE RATE LIMITED LOOP ---
+                // --- THE LOOP ---
                 while (!isComplete && nextIndex !== null) {
 
                     const payload = { startIndex: nextIndex };
 
+                    // Explicit type to fix TS error
                     const syncResponse: Response = await fetch('/api/sync-wom-group-data', {
                         method: 'POST',
                         headers: {
@@ -161,26 +162,34 @@ export default function AdminPage() {
                     const result = await syncResponse.json();
 
                     if (!syncResponse.ok) {
-                        // If we hit a rate limit error, wait longer and retry same index (optional logic, but here we just throw)
                         throw new Error(result.error || 'An unknown error occurred.');
                     }
 
+                    // UI Update
                     if (result.totalPlayers) {
-                        setWomSyncStatus(`Syncing: ${result.progress}% (${result.nextIndex || result.totalPlayers} / ${result.totalPlayers}) - ${result.message}`);
+                        setWomSyncStatus(`Syncing: ${result.progress}% (${nextIndex} / ${result.totalPlayers}) - ${result.message}`);
                     }
 
-                    nextIndex = result.nextIndex;
-                    isComplete = result.isComplete;
+                    // --- DYNAMIC DELAY LOGIC ---
+                    let delayTime = 4500; // Increase default to 4s to be safer
 
-                    // --- THE RATE LIMIT DELAY ---
-                    // Wait 3.5 seconds before asking for the next player.
-                    // This keeps us at ~17 requests per minute (Limit is 20).
-                    if (!isComplete) {
-                        await new Promise(resolve => setTimeout(resolve, 3500));
+                    if (result.wasRateLimited) {
+                        setWomSyncStatus(`Hit rate limit. Cooling down for 10s before retrying ${nextIndex}...`);
+                        delayTime = 10000; // 10 second penalty
+                        // IMPORTANT: We do NOT update nextIndex. We keep the old one to retry it.
+                        // nextIndex stays the same as what we sent
+                    } else {
+                        // Success! Move to next.
+                        nextIndex = result.nextIndex;
+                        isComplete = result.isComplete;
+                    }
+
+                    if (!isComplete && nextIndex !== null) {
+                        await new Promise(resolve => setTimeout(resolve, delayTime));
                     }
                 }
 
-                setWomSyncStatus('Success! All players have been synced.');
+                setWomSyncStatus('Success! All players have been synced to the database.');
 
             } catch (error: any) {
                 setWomSyncStatus(`Error: ${error.message}`);

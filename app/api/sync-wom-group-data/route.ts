@@ -5,10 +5,6 @@ import { WOMClient } from '@wise-old-man/utils';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-// RATE LIMIT STRATEGY:
-// 1 player per batch.
-// The frontend will wait 3.5 seconds between calls.
-// 1 req / 3.5s = ~17 requests per minute (Under the limit of 20).
 const BATCH_SIZE = 1;
 const WOM_GROUP_ID = 5622;
 
@@ -28,23 +24,21 @@ export async function POST(request: Request) {
     const womClient = new WOMClient({ userAgent: 'SeekClanApp/1.0' });
 
     try {
-        // 1. Get Group List
         const groupData = await womClient.groups.getGroupDetails(WOM_GROUP_ID);
         const allMembers = groupData.memberships;
         const totalPlayers = allMembers.length;
 
-        // 2. Slice Batch (Just 1 player)
         const membersBatch = allMembers.slice(startIndex, startIndex + BATCH_SIZE);
 
         if (membersBatch.length === 0) {
             return NextResponse.json({ message: 'Sync complete!', nextIndex: null, progress: 100, isComplete: true });
         }
 
-        console.log(`Processing index: ${startIndex} (Player: ${membersBatch[0].player.username})`);
-
-        // 3. Process the single player
         const member = membersBatch[0];
+        let wasRateLimited = false;
+
         try {
+            console.log(`Processing index: ${startIndex} (Player: ${member.player.username})`);
             const fullDetails = await womClient.players.getPlayerDetailsById(member.player.id);
             const detailsWithRole = { ...fullDetails, role: member.role };
 
@@ -56,21 +50,28 @@ export async function POST(request: Request) {
                 },
                 { onConflict: 'wom_player_id' }
             );
-        } catch (err) {
+        } catch (err: any) {
             console.error(`Failed to sync player ${member.player.username}`, err);
+            // Check if it's likely a rate limit error (429) or generic fetch error
+            if (err.statusCode === 429 || err.message.includes('Too Many Requests')) {
+                wasRateLimited = true;
+            }
         }
 
-        // 4. Calculate Next
-        const nextIndex = startIndex + BATCH_SIZE;
-        const isComplete = nextIndex >= totalPlayers;
+        // --- THE SELF-HEALING LOGIC ---
+        // If we were rate limited, DO NOT advance the index. Tell frontend to retry this one.
+        // If success, advance by 1.
+        const nextIndex = wasRateLimited ? startIndex : (startIndex + BATCH_SIZE);
+        const isComplete = !wasRateLimited && (nextIndex >= totalPlayers);
         const progress = Math.min(Math.round((nextIndex / totalPlayers) * 100), 100);
 
         return NextResponse.json({
-            message: `Synced ${member.player.username}`,
+            message: wasRateLimited ? `Rate limited on ${member.player.username}. Retrying...` : `Synced ${member.player.username}`,
             nextIndex: isComplete ? null : nextIndex,
             totalPlayers,
             progress,
-            isComplete
+            isComplete,
+            wasRateLimited // Flag to tell frontend to wait longer
         });
 
     } catch (error: any) {
