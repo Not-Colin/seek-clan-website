@@ -57,25 +57,35 @@ export async function POST(request: Request) {
         if (playerDetailsError) throw playerDetailsError;
         if (!allPlayerDetailsData) throw new Error("Could not fetch player details from Supabase.");
 
-        // DEBUG: Log the raw count from the database
+        // DEBUG: Create a Map for easier lookup (ID -> Username)
+                const activeWomPlayersMap = new Map();
+                groupData.memberships.forEach((m: any) => {
+                    activeWomPlayersMap.set(String(m.player.id), m.player.username);
+                });
+
+                const dbPlayerIds = new Set();
+                allPlayerDetailsData.forEach(p => {
+                    if (p.wom_details_json && p.wom_details_json.id) {
+                        dbPlayerIds.add(String(p.wom_details_json.id));
+                    }
+                });
+
+                // Calculate who is missing
+                const missingPlayers: string[] = [];
+                activeWomPlayersMap.forEach((username, id) => {
+                    if (!dbPlayerIds.has(id)) {
+                        missingPlayers.push(`${username} (ID: ${id})`);
+                    }
+                });
+
                 console.log(`[DEBUG] Raw Rows from DB: ${allPlayerDetailsData.length}`);
+                console.log(`[DEBUG] Active WOM Members: ${activeWomPlayersMap.size}`);
+                console.log(`[DEBUG] MISSING PLAYERS IN DB (${missingPlayers.length}):`, JSON.stringify(missingPlayers));
 
-                // FIX: Create a Set of STRINGS to ensure type safety
-                const currentMemberIdsSet = new Set(
-                    groupData.memberships.map((m: any) => String(m.player.id))
-                );
-
-                // Step C: Filter using String Comparison
+                // Step C: Filter our local data (Standard Logic)
                 const currentMemberDetails = allPlayerDetailsData
                     .map(p => p.wom_details_json)
-                    .filter(details => {
-                        // Ensure details exists and ID matches (converted to String)
-                        return details && details.id && currentMemberIdsSet.has(String(details.id));
-                    });
-
-                console.log(`[DEBUG] Matches found: ${currentMemberDetails.length}`);
-
-        console.log(`Found ${currentMemberIds.size} current members. Calculating ranks for ${currentMemberDetails.length} matching players in our database.`);
+                    .filter(details => details && details.id && activeWomPlayersMap.has(String(details.id)));
 
         // All subsequent logic now operates on the CORRECT list of current members.
         const { data: allBounties, error: bountiesError } = allBountiesRes;
