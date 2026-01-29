@@ -145,10 +145,10 @@ export default function AdminPage() {
                 let isComplete = false;
 
                 // --- THE LOOP ---
-                // This loop keeps running as long as the server returns a nextIndex
                 while (!isComplete && nextIndex !== null) {
 
-                    const response = await fetch('/api/sync-wom-group-data', {
+                    // Renamed 'response' to 'syncResponse' to fix TypeScript error
+                    const syncResponse = await fetch('/api/sync-wom-group-data', {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${session.access_token}`,
@@ -157,18 +157,16 @@ export default function AdminPage() {
                         body: JSON.stringify({ startIndex: nextIndex })
                     });
 
-                    const result = await response.json();
+                    const result = await syncResponse.json();
 
-                    if (!response.ok) {
+                    if (!syncResponse.ok) {
                         throw new Error(result.error || 'An unknown error occurred.');
                     }
 
-                    // Update the UI text so you can see it working
                     if (result.totalPlayers) {
                         setWomSyncStatus(`Syncing: ${result.progress}% (${result.nextIndex || result.totalPlayers} / ${result.totalPlayers} players)`);
                     }
 
-                    // Update loop variables
                     nextIndex = result.nextIndex;
                     isComplete = result.isComplete;
                 }
@@ -180,7 +178,6 @@ export default function AdminPage() {
                 if (error.message.includes("session has expired")) await handleLogout();
             } finally {
                 setIsSyncingWom(false);
-                // Clear message after 10 seconds
                 setTimeout(() => setWomSyncStatus(''), 10000);
             }
         }, [handleLogout]);
