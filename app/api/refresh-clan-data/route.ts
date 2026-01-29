@@ -46,11 +46,12 @@ export async function POST(request: Request) {
         const currentMemberIds = new Set(groupData.memberships.map((m: any) => m.player.id));
 
         // Step B: Fetch all necessary data from our OWN database.
-        const [allPlayerDetailsRes, allSubmissionsRes, allBountiesRes] = await Promise.all([
-            supabaseAdmin.from('player_details').select('wom_details_json'),
-            supabaseAdmin.from('submissions').select('*'),
-            supabaseAdmin.from('bounties').select('id, image_url, is_active')
-        ]);
+                const [allPlayerDetailsRes, allSubmissionsRes, allBountiesRes] = await Promise.all([
+                    // FIX: Add .neq('wom_player_id', 0) to force a fresh DB read (bypasses cache)
+                    supabaseAdmin.from('player_details').select('wom_details_json').neq('wom_player_id', 0),
+                    supabaseAdmin.from('submissions').select('*'),
+                    supabaseAdmin.from('bounties').select('id, image_url, is_active')
+                ]);
 
         const { data: allPlayerDetailsData, error: playerDetailsError } = allPlayerDetailsRes;
         if (playerDetailsError) throw playerDetailsError;
