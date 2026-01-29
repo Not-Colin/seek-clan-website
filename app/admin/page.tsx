@@ -135,7 +135,7 @@ export default function AdminPage() {
     const handleCalculateRanks = useCallback(async () => { setIsRefreshing(true); setRefreshStatus('Calculating ranks...'); try { const { data: { session }, error: sessionError } = await supabase.auth.refreshSession(); if (sessionError || !session) throw new Error("Your session has expired. Please log in again."); const response = await fetch('/api/refresh-clan-data', { method: 'POST', headers: { 'Authorization': `Bearer ${session.access_token}` } }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'An unknown error occurred.'); setRefreshStatus(result.message); } catch (error: any) { setRefreshStatus(`Error: ${error.message}`); if (error.message.includes("session has expired")) await handleLogout(); } finally { setIsRefreshing(false); setTimeout(() => setRefreshStatus(''), 5000); } }, [handleLogout]);
     const handleWomGroupSync = useCallback(async () => {
             setIsSyncingWom(true);
-            setWomSyncStatus('Initializing sync...');
+            setWomSyncStatus('Initializing rate-limited sync...');
 
             try {
                 const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
@@ -144,14 +144,12 @@ export default function AdminPage() {
                 let nextIndex: number | null = 0;
                 let isComplete = false;
 
-                // --- THE LOOP ---
+                // --- THE RATE LIMITED LOOP ---
                 while (!isComplete && nextIndex !== null) {
 
-                    // 1. Define payload outside the fetch to prevent TS scope errors
                     const payload = { startIndex: nextIndex };
 
-                    // 2. Explicitly type the response object
-                    const res: Response = await fetch('/api/sync-wom-group-data', {
+                    const syncResponse: Response = await fetch('/api/sync-wom-group-data', {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${session.access_token}`,
@@ -160,21 +158,29 @@ export default function AdminPage() {
                         body: JSON.stringify(payload)
                     });
 
-                    const result = await res.json();
+                    const result = await syncResponse.json();
 
-                    if (!res.ok) {
+                    if (!syncResponse.ok) {
+                        // If we hit a rate limit error, wait longer and retry same index (optional logic, but here we just throw)
                         throw new Error(result.error || 'An unknown error occurred.');
                     }
 
                     if (result.totalPlayers) {
-                        setWomSyncStatus(`Syncing: ${result.progress}% (${result.nextIndex || result.totalPlayers} / ${result.totalPlayers} players)`);
+                        setWomSyncStatus(`Syncing: ${result.progress}% (${result.nextIndex || result.totalPlayers} / ${result.totalPlayers}) - ${result.message}`);
                     }
 
                     nextIndex = result.nextIndex;
                     isComplete = result.isComplete;
+
+                    // --- THE RATE LIMIT DELAY ---
+                    // Wait 3.5 seconds before asking for the next player.
+                    // This keeps us at ~17 requests per minute (Limit is 20).
+                    if (!isComplete) {
+                        await new Promise(resolve => setTimeout(resolve, 3500));
+                    }
                 }
 
-                setWomSyncStatus('Success! All players have been synced to the database.');
+                setWomSyncStatus('Success! All players have been synced.');
 
             } catch (error: any) {
                 setWomSyncStatus(`Error: ${error.message}`);
@@ -538,7 +544,7 @@ export default function AdminPage() {
                                         <p className="text-xs text-gray-400 mt-2"> Enter WOM group code. Wait 10 Minutes before starting step 2. </p>
                                     </div>
                                     <div className="mb-6">
-                                        <p className="text-sm text-gray-300 mb-2"> <strong>Step 2 (Slow Update):</strong> After updating on WOM, click here to pull all the fresh data into our database. This will take at least 10 minutes but you can click it and then close the browser </p>
+                                        <p className="text-sm text-gray-300 mb-2"> <strong>Step 2 (Slow Update):</strong> After updating on WOM, click here to pull all the fresh data into our database. This will take at least 10 minutes so do not close the browser </p>
                                         <button type="button" onClick={handleWomGroupSync} disabled={isSyncingWom} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg disabled:bg-slate-600 disabled:cursor-wait"> {isSyncingWom ? 'Syncing Group Data...' : 'Sync Group Data from WOM'} </button>
                                         {womSyncStatus && (<p className="text-center text-sm mt-4 text-gray-300">{womSyncStatus}</p>)}
                                     </div>

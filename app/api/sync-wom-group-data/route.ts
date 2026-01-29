@@ -2,13 +2,15 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { WOMClient } from '@wise-old-man/utils';
 
-// Force dynamic to prevent caching
 export const dynamic = 'force-dynamic';
-// Allow 60 seconds max execution (batches usually take 2-3 seconds)
 export const maxDuration = 60;
 
-const BATCH_SIZE = 5; // Process 5 players at a time
-const WOM_GROUP_ID = 5622; // Your Group ID
+// RATE LIMIT STRATEGY:
+// 1 player per batch.
+// The frontend will wait 3.5 seconds between calls.
+// 1 req / 3.5s = ~17 requests per minute (Under the limit of 20).
+const BATCH_SIZE = 1;
+const WOM_GROUP_ID = 5622;
 
 export async function POST(request: Request) {
     const authHeader = request.headers.get('Authorization');
@@ -16,8 +18,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const token = authHeader.split(' ')[1];
-
-    // 1. Get the starting position from the browser
     const { startIndex = 0 } = await request.json();
 
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
@@ -25,63 +25,48 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-    const womClient = new WOMClient();
+    const womClient = new WOMClient({ userAgent: 'SeekClanApp/1.0' });
 
     try {
-        // 2. Fetch the full group list to get IDs
-        // This is fast and cheap to do on every request
+        // 1. Get Group List
         const groupData = await womClient.groups.getGroupDetails(WOM_GROUP_ID);
         const allMembers = groupData.memberships;
         const totalPlayers = allMembers.length;
 
-        // 3. Grab ONLY the next 5 players
+        // 2. Slice Batch (Just 1 player)
         const membersBatch = allMembers.slice(startIndex, startIndex + BATCH_SIZE);
 
-        // If no members left in this batch, we are done.
         if (membersBatch.length === 0) {
-            return NextResponse.json({
-                message: 'Sync complete!',
-                nextIndex: null,
-                progress: 100,
-                isComplete: true
-            });
+            return NextResponse.json({ message: 'Sync complete!', nextIndex: null, progress: 100, isComplete: true });
         }
 
-        console.log(`Processing batch: ${startIndex} to ${startIndex + membersBatch.length}`);
+        console.log(`Processing index: ${startIndex} (Player: ${membersBatch[0].player.username})`);
 
-        // 4. Fetch details for these 5 players in parallel
-        // This gets the FULL SNAPSHOT (EHB, Boss Kills, etc)
-        const upsertPromises = membersBatch.map(async (member) => {
-            try {
-                const fullDetails = await womClient.players.getPlayerDetailsById(member.player.id);
+        // 3. Process the single player
+        const member = membersBatch[0];
+        try {
+            const fullDetails = await womClient.players.getPlayerDetailsById(member.player.id);
+            const detailsWithRole = { ...fullDetails, role: member.role };
 
-                // IMPORTANT: Inject the role so your rank calculator works
-                const detailsWithRole = { ...fullDetails, role: member.role };
+            await supabaseAdmin.from('player_details').upsert(
+                {
+                    wom_player_id: member.player.id,
+                    wom_details_json: detailsWithRole,
+                    updated_at: new Date().toISOString()
+                },
+                { onConflict: 'wom_player_id' }
+            );
+        } catch (err) {
+            console.error(`Failed to sync player ${member.player.username}`, err);
+        }
 
-                return supabaseAdmin.from('player_details').upsert(
-                    {
-                        wom_player_id: member.player.id,
-                        wom_details_json: detailsWithRole,
-                        updated_at: new Date().toISOString()
-                    },
-                    { onConflict: 'wom_player_id' }
-                );
-            } catch (err) {
-                console.error(`Failed to sync player ${member.player.username}`, err);
-                return null; // Skip errors so one failure doesn't stop the batch
-            }
-        });
-
-        await Promise.all(upsertPromises);
-
-        // 5. Calculate where to start next time
+        // 4. Calculate Next
         const nextIndex = startIndex + BATCH_SIZE;
         const isComplete = nextIndex >= totalPlayers;
         const progress = Math.min(Math.round((nextIndex / totalPlayers) * 100), 100);
 
-        // 6. Respond to browser
         return NextResponse.json({
-            message: `Synced ${membersBatch.length} players...`,
+            message: `Synced ${member.player.username}`,
             nextIndex: isComplete ? null : nextIndex,
             totalPlayers,
             progress,
@@ -89,7 +74,7 @@ export async function POST(request: Request) {
         });
 
     } catch (error: any) {
-        console.error('Batch Sync Error:', error);
+        console.error('Single Sync Error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
