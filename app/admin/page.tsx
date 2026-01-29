@@ -133,7 +133,57 @@ export default function AdminPage() {
     const handleUpdateSettings = useCallback(async (e: FormEvent) => { e.preventDefault(); setSettingsStatus('Saving...'); const { error } = await supabase.from('settings').update({ is_password_required: isPasswordRequired, submission_password: submissionPassword || null }).eq('id', 1); if (error) setSettingsStatus(`Error: ${error.message}`); else { setSettingsStatus('Settings saved!'); setTimeout(() => setSettingsStatus(''), 2000); } }, [isPasswordRequired, submissionPassword]);
     const handleLogout = useCallback(async () => { await supabase.auth.signOut(); setUser(null); router.push('/'); }, [router]);
     const handleCalculateRanks = useCallback(async () => { setIsRefreshing(true); setRefreshStatus('Calculating ranks...'); try { const { data: { session }, error: sessionError } = await supabase.auth.refreshSession(); if (sessionError || !session) throw new Error("Your session has expired. Please log in again."); const response = await fetch('/api/refresh-clan-data', { method: 'POST', headers: { 'Authorization': `Bearer ${session.access_token}` } }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'An unknown error occurred.'); setRefreshStatus(result.message); } catch (error: any) { setRefreshStatus(`Error: ${error.message}`); if (error.message.includes("session has expired")) await handleLogout(); } finally { setIsRefreshing(false); setTimeout(() => setRefreshStatus(''), 5000); } }, [handleLogout]);
-    const handleWomGroupSync = useCallback(async () => { setIsSyncingWom(true); setWomSyncStatus('Initiating background sync...'); try { const { data: { session }, error: sessionError } = await supabase.auth.refreshSession(); if (sessionError || !session) throw new Error("Your session has expired. Please log in again."); const response = await fetch('/api/sync-wom-group-data', { method: 'POST', headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ startIndex: 0 }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'An unknown error occurred.'); setWomSyncStatus(result.message); } catch (error: any) { setWomSyncStatus(`Error: ${error.message}`); if (error.message.includes("session has expired")) await handleLogout(); } finally { setIsSyncingWom(false); setTimeout(() => setWomSyncStatus(''), 20000); } }, [handleLogout]);
+    const handleWomGroupSync = useCallback(async () => {
+            setIsSyncingWom(true);
+            setWomSyncStatus('Initializing sync...');
+
+            try {
+                const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
+                if (sessionError || !session) throw new Error("Your session has expired. Please log in again.");
+
+                let nextIndex: number | null = 0;
+                let isComplete = false;
+
+                // --- THE LOOP ---
+                // This loop keeps running as long as the server returns a nextIndex
+                while (!isComplete && nextIndex !== null) {
+
+                    const response = await fetch('/api/sync-wom-group-data', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${session.access_token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ startIndex: nextIndex })
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.error || 'An unknown error occurred.');
+                    }
+
+                    // Update the UI text so you can see it working
+                    if (result.totalPlayers) {
+                        setWomSyncStatus(`Syncing: ${result.progress}% (${result.nextIndex || result.totalPlayers} / ${result.totalPlayers} players)`);
+                    }
+
+                    // Update loop variables
+                    nextIndex = result.nextIndex;
+                    isComplete = result.isComplete;
+                }
+
+                setWomSyncStatus('Success! All players have been synced to the database.');
+
+            } catch (error: any) {
+                setWomSyncStatus(`Error: ${error.message}`);
+                if (error.message.includes("session has expired")) await handleLogout();
+            } finally {
+                setIsSyncingWom(false);
+                // Clear message after 10 seconds
+                setTimeout(() => setWomSyncStatus(''), 10000);
+            }
+        }, [handleLogout]);
     const handleGenerateSpotlight = useCallback(async () => { setIsGeneratingSpotlight(true); setSpotlightStatus('Processing a batch, this may take a moment...'); try { const { data: { session }, error: sessionError } = await supabase.auth.refreshSession(); if (sessionError || !session) throw new Error("Your session has expired. Please log in again."); const response = await fetch('/api/get-spotlight-images', { method: 'POST', headers: { 'Authorization': `Bearer ${session.access_token}` } }); if (!response.ok) { try { const result = await response.json(); throw new Error(result.error || 'An unknown error occurred.'); } catch (e) { throw new Error(`Server returned a non-JSON response. It may have timed out. Status: ${response.status}`); } } const result = await response.json(); setSpotlightStatus(result.message); } catch (error: any) { setSpotlightStatus(`Error: ${error.message}`); if (error.message.includes("session has expired")) await handleLogout(); } finally { setIsGeneratingSpotlight(false); setTimeout(() => setSpotlightStatus(''), 15000); } }, [handleLogout]);
     const handleSingleSpotlightUpdate = useCallback(async () => { if (!selectedPlayerId) { setSingleUpdateStatus('Please select a player.'); return; } setIsUpdatingSingle(true); setSingleUpdateStatus(`Updating ${allClanMembers.find(p => p.id.toString() === selectedPlayerId)?.displayName}...`); try { const { data: { session }, error: sessionError } = await supabase.auth.refreshSession(); if (sessionError || !session) throw new Error("Session expired. Please log in again."); const response = await fetch('/api/update-single-spotlight', { method: 'POST', headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ wom_player_id: parseInt(selectedPlayerId, 10) }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'An unknown error occurred.'); setSingleUpdateStatus(result.message); } catch (error: any) { setSingleUpdateStatus(`Error: ${error.message}`); if (error.message.includes("session has expired")) await handleLogout(); } finally { setIsUpdatingSingle(false); setTimeout(() => setSingleUpdateStatus(''), 8000); } }, [selectedPlayerId, allClanMembers, handleLogout]);
     const generateSlug = (title: string) => title.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
