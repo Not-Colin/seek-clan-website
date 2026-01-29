@@ -57,10 +57,23 @@ export async function POST(request: Request) {
         if (playerDetailsError) throw playerDetailsError;
         if (!allPlayerDetailsData) throw new Error("Could not fetch player details from Supabase.");
 
-        // Step C: Filter our local data to only include current members.
-        const currentMemberDetails = allPlayerDetailsData
-            .map(p => p.wom_details_json)
-            .filter(details => details && currentMemberIds.has(details.id));
+        // DEBUG: Log the raw count from the database
+                console.log(`[DEBUG] Raw Rows from DB: ${allPlayerDetailsData.length}`);
+
+                // FIX: Create a Set of STRINGS to ensure type safety
+                const currentMemberIdsSet = new Set(
+                    groupData.memberships.map((m: any) => String(m.player.id))
+                );
+
+                // Step C: Filter using String Comparison
+                const currentMemberDetails = allPlayerDetailsData
+                    .map(p => p.wom_details_json)
+                    .filter(details => {
+                        // Ensure details exists and ID matches (converted to String)
+                        return details && details.id && currentMemberIdsSet.has(String(details.id));
+                    });
+
+                console.log(`[DEBUG] Matches found: ${currentMemberDetails.length}`);
 
         console.log(`Found ${currentMemberIds.size} current members. Calculating ranks for ${currentMemberDetails.length} matching players in our database.`);
 
