@@ -553,7 +553,7 @@ export default function AdminPage() {
                                         <p className="text-xs text-gray-400 mt-2"> Enter WOM group code. Wait 10 Minutes before starting step 2. </p>
                                     </div>
                                     <div className="mb-6">
-                                        <p className="text-sm text-gray-300 mb-2"> <strong>Step 2 (Slow Update):</strong> After updating on WOM, click here to pull all the fresh data into our database. This will take at least 10 minutes so do not close the browser </p>
+                                        <p className="text-sm text-gray-300 mb-2"> <strong>Step 2 (Slow Update):</strong> After updating on WOM, click here to pull all the fresh data into our database. This will take at least 10 minutes. Wait for it to finish and do not close the browser </p>
                                         <button type="button" onClick={handleWomGroupSync} disabled={isSyncingWom} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg disabled:bg-slate-600 disabled:cursor-wait"> {isSyncingWom ? 'Syncing Group Data...' : 'Sync Group Data from WOM'} </button>
                                         {womSyncStatus && (<p className="text-center text-sm mt-4 text-gray-300">{womSyncStatus}</p>)}
                                     </div>
